@@ -2,3 +2,4 @@
 /run
 /.vscode
 /compile_commands.json
+/.cache
