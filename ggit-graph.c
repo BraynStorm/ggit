@@ -103,6 +103,7 @@ ggit_load_refs(
                 start_name = i + 1;
                 break;
             case '\0':
+                break;
             case '\n':
                 char* name = strndup(i - start_name, refs + start_name);
                 ggit_vector_push(ref_names, &name);
@@ -207,7 +208,8 @@ ggit_local_branch_to_tag(char const* ref_name)
         return ggit_primary_tag_hotfix;
     if (starts_with(ref_name, "release"))
         return ggit_primary_tag_release;
-    if (starts_with(ref_name, "develop"))
+    if (starts_with(ref_name, "develop") || starts_with(ref_name, "sprint"))
+
         return ggit_primary_tag_develop;
     return ggit_primary_tag_none;
 }
@@ -237,7 +239,9 @@ ggit_label_merge_commits(
         int const* my_parents = ggit_vector_ref_commit_parents(commit_parents, c)
                                     ->parent;
         if (my_parents[1] == -1)
+            // One parent -> ignore the commit.
             continue;
+
         /* NOTE(boz): has 2 parents -> merge commit. */
         /* PERF(boz):
             Unoptimized. A 'cache-miss' just to get the length of a message?
@@ -313,19 +317,13 @@ ggit_graph_load_repository(
 
     GGIT_VECTOR_DEFINE(ref_names, char*, heuristic_refs);
     GGIT_VECTOR_DEFINE(ref_hashes, char[40], heuristic_refs);
-    GGIT_VECTOR_DEFINE(
-        ref_y,
-        int,
-        heuristic_refs
-    ); /* TODO: can use the size of the ref_names. */
+    /* TODO: can use the size of the ref_names. */
+    GGIT_VECTOR_DEFINE(ref_y, int, heuristic_refs);
 
     GGIT_VECTOR_DEFINE(commit_messages, char*, heuristic_commits);
     GGIT_VECTOR_DEFINE(commit_message_lengths, int, heuristic_commits);
-    GGIT_VECTOR_DEFINE(
-        commit_hashes,
-        char*,
-        heuristic_commits
-    ); /* TODO: change to char[40] */
+    /* TODO: change to char[40] */
+    GGIT_VECTOR_DEFINE(commit_hashes, char*, heuristic_commits);
     GGIT_VECTOR_DEFINE(commit_parents, struct ggit_commit_parents, heuristic_commits);
     GGIT_VECTOR_DEFINE(commit_tags, struct ggit_commit_tag, heuristic_commits);
 
@@ -380,9 +378,7 @@ ggit_graph_load_repository(
                 char const* p0_hash = gitlog + parts[2];
                 char const* p1_hash = gitlog + parts[4];
 
-                struct ggit_commit_parents parents;
-                memset(&parents, -1, sizeof(parents));
-
+                struct ggit_commit_parents parents = { -1, -1 };
                 /* PERF(boz):
                     THIS IS VERY SLOW!!!
                     Implement a hashmap to MASSIVELY speed this up.
@@ -408,8 +404,10 @@ ggit_graph_load_repository(
                 ggit_vector_push(&commit_message_lengths, &msg_len);
                 ggit_vector_push(&commit_messages, &msg);
                 ggit_vector_push(&commit_hashes, &hash);
-                struct ggit_commit_tag tags = { ggit_primary_tag_none,
-                                                ggit_primary_tag_none };
+                struct ggit_commit_tag tags = {
+                    ggit_primary_tag_none,
+                    ggit_primary_tag_none,
+                };
                 ggit_vector_push(&commit_tags, &tags);
                 // debug_print_parsed_commit(gitlog, parts);
             }

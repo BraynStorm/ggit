@@ -19,6 +19,8 @@
 #include <Windows.h>
 #undef DrawText
 
+#define ARRAY_COUNT(array) ARRAYSIZE(array)
+
 /* TODO: add more. */
 SDL_Color const colors[] = { { 0xE6, 0x00, 0x00, 0xFF },
                              { 0x7E, 0xD3, 0x21, 0xFF },
@@ -402,6 +404,97 @@ set_color(SDL_Renderer* renderer, SDL_Color color)
     SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
 }
 
+static void
+ggit_graph_draw(
+    struct ggit_graph* graph,
+    SDL_Renderer* renderer,
+    TTF_Font* font_monospaced
+)
+{
+    int const item_w = 38;
+    int const item_h = 26;
+    int const border = 2;
+    int const margin = 3;
+
+    int const item_outer_w = item_w + border * 2;
+    int const item_outer_h = item_h + border * 2;
+
+    int const text_x = (graph->width + 1) * item_outer_w + 16;
+
+    int last_commit_center_x = 0;
+    int last_commit_center_y = 0;
+
+    // Draw the text to the right.
+    set_color(renderer, (SDL_Color){ 0x05, 0x05, 0x05, 0xFF });
+    for (int i = 0; i < graph->height; ++i) {
+        int const commit_i = graph->height - 1 - i;
+        char const* message = graph->messages[commit_i];
+        DrawText(renderer, font_monospaced, message, text_x, i * item_outer_h, 0, 0);
+    }
+
+    // Draw lines between the commits.
+    for (int i = 0; i < graph->height; ++i) {
+        int const commit_i = graph->height - 1 - i;
+        int const tag = graph->tags[commit_i].tag[0];
+        int const column = tag;
+
+        int const commit_x = column * item_outer_w + border;
+        int const commit_y = i * item_outer_h + border;
+        int const commit_center_x = commit_x + item_outer_w / 2;
+        int const commit_center_y = commit_y + item_outer_h / 2;
+
+        if (i) {
+            set_color(renderer, (SDL_Color){ 0xAA, 0xAA, 0xAA, 0xFF });
+            SDL_RenderDrawLine(
+                renderer,
+                commit_center_x,
+                commit_y,
+                last_commit_center_x,
+                last_commit_center_y
+            );
+        }
+
+        last_commit_center_x = commit_center_x;
+        last_commit_center_y = commit_center_y;
+    }
+
+    // Draw the rectangles of the commits.
+    for (int i = 0; i < graph->height; ++i) {
+        int const commit_i = graph->height - 1 - i;
+        int const tag = graph->tags[commit_i].tag[0];
+        int const column = tag;
+
+        int const commit_x = column * item_outer_w + border;
+        int const commit_y = i * item_outer_h + border;
+
+        set_color(renderer, (SDL_Color){ 0xE3, 0xE3, 0xE3, 0xFF });
+        SDL_RenderFillRect(
+            renderer,
+            &(SDL_Rect){
+                .x = commit_x,
+                .y = commit_y,
+                .w = item_outer_w,
+                .h = item_outer_h,
+            }
+        );
+
+        if (tag < ARRAY_COUNT(colors)) {
+            set_color(renderer, colors[tag]);
+        } else {
+            set_color(renderer, (SDL_Color){ 0xEE, 0xEE, 0xEE, 0xFF });
+        }
+        SDL_RenderFillRect(
+            renderer,
+            &(SDL_Rect){
+                .x = commit_x + border,
+                .y = commit_y + border,
+                .w = item_w,
+                .h = item_h,
+            }
+        );
+    }
+}
+
 int
 main(int argc, char** argv)
 {
@@ -413,19 +506,13 @@ main(int argc, char** argv)
     int window_width;
     int window_height;
     SDL_GetWindowSize(window, &window_width, &window_height);
-    TTF_Font* font = TTF_OpenFont("consola.ttf", 14);
+    TTF_Font* font = TTF_OpenFont("res/segoeui.ttf", 14);
 
     struct Input input = { 0 };
-    struct Graph graph = { 0 };
-    graph_init(&graph);
-    graph_commit(&graph, _strdup("feat: A"), 0, 0);
-    graph_commit(&graph, _strdup("feat: B"), 0, 0);
-    graph_create_branch(&graph, "dev");
-    graph_commit(&graph, _strdup("feat: C"), 0, 0);
-    graph_commit(&graph, _strdup("feat: D"), 0, 0);
-    graph_checkout(&graph, "master");
-    graph_commit(&graph, _strdup("feat: HA!"), 0, 0);
-    graph_init_from_git(&graph);
+
+    struct ggit_graph graph;
+    ggit_graph_init(&graph);
+    ggit_graph_load(&graph, "../../tests/simple-1");
 
     bool running = true;
     while (running) {
@@ -455,9 +542,10 @@ main(int argc, char** argv)
             }
         }
 
-        SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+        SDL_SetRenderDrawColor(renderer, 220, 220, 220, 255);
         SDL_RenderClear(renderer);
 
+#if 0
         int x = 167;
         for (int i = graph.commit_hashes.size - 1; i >= 0; i--) {
             int y = (26 + 5) * i;
@@ -493,7 +581,8 @@ main(int argc, char** argv)
             if (y >= window_height)
                 break;
         }
-
+#endif
+        ggit_graph_draw(&graph, renderer, font);
         SDL_RenderPresent(renderer);
     }
 end:;

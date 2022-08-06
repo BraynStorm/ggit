@@ -19,3 +19,9 @@ file(
         "${CMAKE_SOURCE_DIR}/deps/bin/SDL2_ttf.dll"
     DESTINATION "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
 )
+
+file(
+    COPY
+        "${CMAKE_SOURCE_DIR}/res/"
+    DESTINATION "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/res/"
+)
