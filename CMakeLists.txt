@@ -10,10 +10,12 @@ set(CMAKE_C_STANDARD_REQUIRED 23)
 include_directories(${CMAKE_SOURCE_DIR}/deps/include)
 link_directories(${CMAKE_SOURCE_DIR}/deps/lib)
 
-add_executable(ggit ggit.c)
-target_link_libraries(ggit SDL2 SDL2main)
+add_executable(ggit ggit.c ggit-vector.c ggit-graph.c)
+target_link_libraries(ggit SDL2 SDL2main SDL2_ttf)
 
 file(
-    COPY "${CMAKE_SOURCE_DIR}/deps/bin/SDL2.dll"
+    COPY
+        "${CMAKE_SOURCE_DIR}/deps/bin/SDL2.dll"
+        "${CMAKE_SOURCE_DIR}/deps/bin/SDL2_ttf.dll"
     DESTINATION "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
 )
