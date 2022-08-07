@@ -349,6 +349,60 @@ error_stdin:;
 }
 
 static void
+draw_rect_cut(
+    SDL_Renderer* renderer,
+    int x0,
+    int y0,
+    int x1,
+    int y1,
+    int cut,
+    SDL_Color color
+)
+{
+    SDL_Vertex vertices[] = {
+        // top-left corner
+        (SDL_Vertex){ { x0 + cut, y0 }, color } /* top */,
+        (SDL_Vertex){ { x0, y0 + cut }, color } /* bottom */,
+
+        // bottom-left corner
+        (SDL_Vertex){ { x0, y1 - cut }, color } /* top */,
+        (SDL_Vertex){ { x0 + cut, y1 }, color } /* bottom */,
+
+        // bottom-right corner
+        (SDL_Vertex){ { x1 - cut, y1 }, color } /* bottom */,
+        (SDL_Vertex){ { x1, y1 - cut }, color } /* top */,
+
+        // top-right corner
+        (SDL_Vertex){ { x1, y0 + cut }, color } /* bottom */,
+        (SDL_Vertex){ { x1 - cut, y0 }, color } /* top */,
+    };
+    int const indices[] = {
+        // clang-format off
+        
+        // left side
+        1, 2, 3,
+        0, 1, 3,
+        
+        // center
+        0, 3, 4,
+        0, 4, 7,
+
+        // right side
+        7, 4, 6,
+        6, 4, 5,
+
+        // clang-format on
+    };
+    SDL_RenderGeometry(
+        renderer,
+        0,
+        vertices,
+        ARRAY_COUNT(vertices),
+        indices,
+        ARRAY_COUNT(indices)
+    );
+}
+static void
 graph_init_from_git(struct Graph* g)
 {
     struct ggit_vector git_out;
@@ -376,11 +430,10 @@ DrawText(
     if (!text_h)
         text_h = &text_h_dummy;
 
-    SDL_Surface* text_surface = TTF_RenderUTF8_LCD(
+    SDL_Surface* text_surface = TTF_RenderUTF8_Solid(
         font,
         text,
-        (SDL_Color){ 0, 0, 0, 255 },
-        (SDL_Color){ 255, 255, 255, 255 }
+        (SDL_Color){ 0, 0, 0, 255 } // , (SDL_Color){ 255, 255, 255, 255 }
     );
     SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, text_surface);
     TTF_SizeUTF8(font, text, text_w, text_h);
@@ -467,30 +520,33 @@ ggit_graph_draw(
         int const commit_x = column * item_outer_w + border;
         int const commit_y = i * item_outer_h + border;
 
+        int const cut = 4;
         set_color(renderer, (SDL_Color){ 0xE3, 0xE3, 0xE3, 0xFF });
-        SDL_RenderFillRect(
+        draw_rect_cut(
             renderer,
-            &(SDL_Rect){
-                .x = commit_x,
-                .y = commit_y,
-                .w = item_outer_w,
-                .h = item_outer_h,
-            }
+            commit_x,
+            commit_y,
+            commit_x + item_outer_w,
+            commit_y + item_outer_h,
+            cut,
+            (SDL_Color){ 0xE3, 0xE3, 0xE3, 0xFF }
         );
 
+        SDL_Color color;
         if (tag < ARRAY_COUNT(colors)) {
-            set_color(renderer, colors[tag]);
+            color = colors[tag];
         } else {
-            set_color(renderer, (SDL_Color){ 0xEE, 0xEE, 0xEE, 0xFF });
+            color = (SDL_Color){ 0xEE, 0xEE, 0xEE, 0xFF };
         }
-        SDL_RenderFillRect(
+        // set_color(renderer, c);
+        draw_rect_cut(
             renderer,
-            &(SDL_Rect){
-                .x = commit_x + border,
-                .y = commit_y + border,
-                .w = item_w,
-                .h = item_h,
-            }
+            commit_x + border,
+            commit_y + border,
+            commit_x + border + item_w,
+            commit_y + border + item_h,
+            cut,
+            color
         );
     }
 }
