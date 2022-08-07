@@ -17,16 +17,20 @@
 #define NOMINMAX
 #define NONEARFAR
 #include <Windows.h>
-#undef DrawText
 
 #define ARRAY_COUNT(array) ARRAYSIZE(array)
 
 /* TODO: add more. */
-SDL_Color const colors[] = { { 0xE6, 0x00, 0x00, 0xFF },
-                             { 0x7E, 0xD3, 0x21, 0xFF },
-                             { 0x00, 0x68, 0xDE, 0xFF },
-                             { 0xE6, 0x96, 0x17, 0xFF },
-                             { 0xB8, 0x16, 0xD9, 0xFF } };
+SDL_Color const colors[] = {
+    { 0xE6, 0x00, 0x00, 0xFF },
+    { 0x7E, 0xD3, 0x21, 0xFF },
+    { 0x00, 0x68, 0xDE, 0xFF },
+    { 0xE6, 0x96, 0x17, 0xFF },
+    { 0xB8, 0x16, 0xD9, 0xFF },
+    //
+    {},
+};
+/* TODO: use these. */
 SDL_Color const color_vline = { 0x9B, 0x9B, 0x9B, 0xFF };
 SDL_Color const color_hline = { 0xDA, 0xDA, 0xDA, 0xFF };
 
@@ -60,161 +64,6 @@ random_hash(struct Hash* out)
         out->sha[i] = rand();
 }
 
-
-struct Graph
-{
-    struct ggit_vector commit_messages;
-    struct ggit_vector commit_hashes;
-    struct ggit_vector commit_parents;
-
-    struct ggit_vector branch_names;
-    struct ggit_vector branch_refs;
-
-    int head;
-};
-static void
-graph_commit(
-    struct Graph* g,
-    char* message,
-    struct Hash* parent_a,
-    struct Hash* parent_b
-)
-{
-    ggit_vector_push(&g->commit_messages, &message);
-
-    Parents parents = { 0 };
-    if (parent_a) {
-        parents[0] = *parent_a;
-
-        if (parent_b)
-            parents[1] = *parent_b;
-    } else {
-        parents[0] = ggit_vector_get_ref(&g->branch_refs, g->head);
-    }
-    ggit_vector_push(&g->commit_parents, &parents);
-
-    Ref ref = { 0 };
-    random_hash(&ref);
-    *ggit_vector_ref_ref(&g->branch_refs, g->head) = ref;
-    ggit_vector_push(&g->commit_hashes, &ref);
-}
-static void
-graph_reset(struct Graph* g, Ref* ref)
-{
-    if (!g->branch_refs.size)
-        return;
-
-    *ggit_vector_ref_ref(&g->branch_refs, g->head) = *ref;
-}
-static void
-graph_create_branch(struct Graph* g, char const* name)
-{
-    char* name_copy = _strdup(name);
-    if (g->branch_refs.size) {
-        int old_branch = g->head;
-        Ref* ref = ggit_vector_ref_ref(&g->branch_refs, old_branch);
-
-        // Create the branch name and the ref.
-        g->head = g->branch_names.size;
-
-        ggit_vector_push(&g->branch_names, &name_copy);
-        ggit_vector_push(&g->branch_refs, ref);
-    } else {
-        ggit_vector_push(&g->branch_names, &name_copy);
-        ggit_vector_push(&g->branch_refs, &(Ref){ 0 });
-    }
-}
-static void
-graph_checkout(struct Graph* g, char const* thing)
-{
-    for (int i = 0; i < g->branch_names.size; ++i) {
-        char const* branch_name = ggit_vector_get_string(&g->branch_names, i);
-        if (strcmp(branch_name, thing) == 0) {
-            g->head = i;
-            goto end_find;
-        }
-    }
-
-    /* TODO:implement */
-    abort();
-
-end_find:;
-}
-static void
-graph_merge(struct Graph* g, char const* thing)
-{
-    int const current_branch = g->head;
-    char const* current_branch_name = *(char**)ggit_vector_get(
-        &g->branch_names,
-        current_branch
-    );
-
-    bool is_branch = false;
-    bool is_commit = false;
-    struct Hash* ref = 0;
-    char const* other_branch_name = 0;
-
-    for (int i = 0; i < g->commit_hashes.size; ++i) {
-        Ref* commit = ggit_vector_ref_ref(&g->commit_hashes, i);
-        if (strcmp((char const*)commit->sha, thing) == 0) {
-            // They are the same!
-            ref = commit;
-            is_commit = true;
-            goto end_find;
-        }
-    }
-
-    for (int i = 0; i < g->branch_names.size; ++i) {
-        char const* branch_name = ggit_vector_get_string(&g->branch_names, i);
-        if (strcmp(branch_name, thing) == 0) {
-            // They are the same!
-            is_branch = true;
-            other_branch_name = ggit_vector_get_string(&g->branch_names, i);
-            ref = ggit_vector_ref_ref(&g->branch_refs, i);
-            goto end_find;
-        }
-    }
-
-end_find:;
-
-    char* message = calloc(256, 1);
-    if (is_branch) {
-        sprintf_s(
-            message,
-            256,
-            "Merge branch '%s' into '%s'.",
-            other_branch_name,
-            current_branch_name
-        );
-    } else if (is_commit) {
-        sprintf_s(
-            message,
-            256,
-            "Merge '%.40s' into '%s'.",
-            ref->sha,
-            current_branch_name
-        );
-    }
-
-    graph_commit(g, message, ggit_vector_ref_ref(&g->branch_refs, g->head), ref);
-}
-static void
-graph_init(struct Graph* g)
-{
-    memset(g, 0, sizeof(*g));
-    ggit_vector_init(&g->commit_messages, sizeof(char*));
-    ggit_vector_init(&g->commit_hashes, sizeof(struct Hash));
-    ggit_vector_init(&g->commit_parents, sizeof(Parents));
-    ggit_vector_init(&g->branch_names, sizeof(char*));
-    ggit_vector_init(&g->branch_refs, sizeof(struct Hash));
-
-    char* text = _strdup("Initial commit");
-    ggit_vector_push(&g->commit_messages, &text);
-    ggit_vector_push(&g->commit_hashes, &(struct Hash){ 0 });
-    ggit_vector_push(&g->commit_parents, &(Parents){ 0 });
-
-    graph_create_branch(g, "master");
-}
 
 /* TODO:
     Use this instead of _popen in ggit_graph_load();
@@ -403,17 +252,7 @@ draw_rect_cut(
     );
 }
 static void
-graph_init_from_git(struct Graph* g)
-{
-    struct ggit_vector git_out;
-    ggit_vector_init(&git_out, sizeof(char));
-
-    char* command_line = _strdup("git log --oneline");
-    call_git(command_line, &git_out);
-    free(command_line);
-}
-static void
-DrawText(
+util_draw_text(
     SDL_Renderer* renderer,
     TTF_Font* font,
     char const* text,
@@ -482,7 +321,15 @@ ggit_graph_draw(
     for (int i = 0; i < graph->height; ++i) {
         int const commit_i = graph->height - 1 - i;
         char const* message = graph->messages[commit_i];
-        DrawText(renderer, font_monospaced, message, text_x, i * item_outer_h, 0, 0);
+        util_draw_text(
+            renderer,
+            font_monospaced,
+            message,
+            text_x,
+            i * item_outer_h,
+            0,
+            0
+        );
     }
 
     // Draw lines between the commits.
@@ -496,6 +343,7 @@ ggit_graph_draw(
         int const commit_center_x = commit_x + item_outer_w / 2;
         int const commit_center_y = commit_y + item_outer_h / 2;
 
+        /* TODO: Yank this out of the loop. */
         if (i) {
             set_color(renderer, (SDL_Color){ 0xAA, 0xAA, 0xAA, 0xFF });
             SDL_RenderDrawLine(
@@ -520,7 +368,7 @@ ggit_graph_draw(
         int const commit_x = column * item_outer_w + border;
         int const commit_y = i * item_outer_h + border;
 
-        int const cut = 4;
+        int const cut = 3;
         set_color(renderer, (SDL_Color){ 0xE3, 0xE3, 0xE3, 0xFF });
         draw_rect_cut(
             renderer,
@@ -600,44 +448,6 @@ main(int argc, char** argv)
 
         SDL_SetRenderDrawColor(renderer, 220, 220, 220, 255);
         SDL_RenderClear(renderer);
-
-#if 0
-        int x = 167;
-        for (int i = graph.commit_hashes.size - 1; i >= 0; i--) {
-            int y = (26 + 5) * i;
-
-            int c = 0;
-
-            Ref const* commit_hash = ggit_vector_ref_ref(&graph.commit_hashes, i);
-            for (int b = 0; b < graph.branch_refs.size; ++b) {
-                Ref const* branch_hash = ggit_vector_ref_ref(&graph.branch_refs, b);
-
-                if (memcmp(branch_hash, commit_hash, sizeof(*branch_hash)) == 0) {
-                    SDL_SetRenderDrawColor(renderer, 20, 20, 20, 255);
-                    char const* branch_name = ggit_vector_get_string(
-                        &graph.branch_names,
-                        b
-                    );
-                    DrawText(renderer, font, branch_name, x - 100, y + 5, 0, 0);
-                }
-            }
-            set_color(renderer, colors[c]);
-            SDL_RenderFillRect(renderer, &(struct SDL_Rect){ x, y, 38, 26 });
-
-            SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
-            DrawText(
-                renderer,
-                font,
-                ggit_vector_get_string(&graph.commit_messages, i),
-                x + 100,
-                y + 5,
-                0,
-                0
-            );
-            if (y >= window_height)
-                break;
-        }
-#endif
         ggit_graph_draw(&graph, renderer, font);
         SDL_RenderPresent(renderer);
     }
