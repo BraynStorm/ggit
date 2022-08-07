@@ -359,7 +359,7 @@ ggit_graph_draw(
         last_commit_center_y = commit_center_y;
     }
 
-    // Draw the rectangles of the commits.
+    // Draw the blocks.
     for (int i = 0; i < graph->height; ++i) {
         int const commit_i = graph->height - 1 - i;
         int const tag = graph->tags[commit_i].tag[0];
@@ -369,7 +369,7 @@ ggit_graph_draw(
         int const commit_y = i * item_outer_h + border;
 
         int const cut = 3;
-        set_color(renderer, (SDL_Color){ 0xE3, 0xE3, 0xE3, 0xFF });
+
         draw_rect_cut(
             renderer,
             commit_x,
@@ -380,13 +380,9 @@ ggit_graph_draw(
             (SDL_Color){ 0xE3, 0xE3, 0xE3, 0xFF }
         );
 
-        SDL_Color color;
-        if (tag < ARRAY_COUNT(colors)) {
-            color = colors[tag];
-        } else {
-            color = (SDL_Color){ 0xEE, 0xEE, 0xEE, 0xFF };
-        }
-        // set_color(renderer, c);
+        SDL_Color color = tag < ARRAY_COUNT(colors)
+                              ? color = colors[tag]
+                              : (SDL_Color){ 0xEE, 0xEE, 0xEE, 0xFF };
         draw_rect_cut(
             renderer,
             commit_x + border,
