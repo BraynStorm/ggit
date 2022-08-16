@@ -288,6 +288,7 @@ util_draw_text(
         }
     );
     SDL_DestroyTexture(texture);
+    SDL_FreeSurface(text_surface);
 }
 
 static void
