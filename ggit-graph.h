@@ -32,6 +32,7 @@ struct ggit_graph
     char** hashes;
     struct ggit_commit_parents* parents;
     struct ggit_commit_tag* tags;
+    int* commit_xs;
 };
 
 // clang-format align
