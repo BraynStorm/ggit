@@ -214,12 +214,12 @@ draw_rect_cut(
         (SDL_Vertex){ { x0 + cut, y1 }, color } /* bottom */,
 
         // bottom-right corner
-        (SDL_Vertex){ { x1 - cut, y1 }, color } /* bottom */,
-        (SDL_Vertex){ { x1, y1 - cut }, color } /* top */,
+        (SDL_Vertex){ { x1 - cut + 1, y1 }, color } /* bottom */,
+        (SDL_Vertex){ { x1, y1 - cut + 1 }, color } /* top */,
 
         // top-right corner
         (SDL_Vertex){ { x1, y0 + cut }, color } /* bottom */,
-        (SDL_Vertex){ { x1 - cut, y0 }, color } /* top */,
+        (SDL_Vertex){ { x1 - cut + 1, y0 }, color } /* top */,
     };
     int const indices[] = {
         // clang-format off
