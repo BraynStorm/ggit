@@ -1,3 +1,11 @@
+/*
+    Tasks
+    ========
+
+    - Replace SDL with GDI.
+    - Split platform layer.
+*/
+
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_main.h>
 #include <SDL2/SDL_video.h>
@@ -5,6 +13,7 @@
 #include <SDL2/SDL_rect.h>
 #include <SDL2/SDL_surface.h>
 #include <SDL2/SDL_ttf.h>
+#include <SDL2/SDL_syswm.h>
 
 #include <stdbool.h>
 #include <stdio.h>
@@ -20,20 +29,7 @@
 
 #define ARRAY_COUNT(array) ARRAYSIZE(array)
 
-/* TODO: add more. */
-SDL_Color const colors[] = {
-    { 0xE6, 0x00, 0x00, 0xFF },
-    { 0x7E, 0xD3, 0x21, 0xFF },
-    { 0x00, 0x68, 0xDE, 0xFF },
-    { 0xE6, 0x96, 0x17, 0xFF },
-    { 0xB8, 0x16, 0xD9, 0xFF },
-    //
-    {},
-};
-/* TODO: use these. */
-SDL_Color const color_vline = { 0x9B, 0x9B, 0x9B, 0xFF };
-SDL_Color const color_hline = { 0xDA, 0xDA, 0xDA, 0xFF };
-
+#include "ggit-ui-settings.h"
 
 struct Input
 {
@@ -101,9 +97,9 @@ call_git(char const* command_line, struct ggit_vector* stdout_buffer)
         if (!CreatePipe(&stderr_pipe_read, &stderr_pipe_write, &security, 0))
             goto error_stderr;
 
-        if (!SetHandleInformation(stdin_pipe_write, HANDLE_FLAG_INHERIT, 0) ||
-            !SetHandleInformation(stdout_pipe_read, HANDLE_FLAG_INHERIT, 0) ||
-            !SetHandleInformation(stderr_pipe_read, HANDLE_FLAG_INHERIT, 0))
+        if (!SetHandleInformation(stdin_pipe_write, HANDLE_FLAG_INHERIT, 0)
+            || !SetHandleInformation(stdout_pipe_read, HANDLE_FLAG_INHERIT, 0)
+            || !SetHandleInformation(stderr_pipe_read, HANDLE_FLAG_INHERIT, 0))
             goto error_set_handle_info;
     }
 
@@ -297,16 +293,6 @@ set_color(SDL_Renderer* renderer, SDL_Color color)
     SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
 }
 
-// static int const ITEM_W = 38;
-// static int const ITEM_H = 26;
-static int const ITEM_W = 38 * 0.7;
-static int const ITEM_H = 26 * 0.7;
-static int const BORDER = 2;
-static int const MARGIN = 3;
-
-static int const ITEM_OUTER_W = ITEM_W + BORDER * 2;
-static int const ITEM_OUTER_H = ITEM_H + BORDER * 2;
-
 static inline int
 ggit_graph_commit_screen_x_left(struct ggit_graph* graph, int commit_index)
 {
@@ -315,7 +301,7 @@ ggit_graph_commit_screen_x_left(struct ggit_graph* graph, int commit_index)
         tag = ggit_primary_tag_COUNT;
     int const column = tag;
 
-    int const commit_x_left = column * ITEM_OUTER_W + BORDER;
+    int const commit_x_left = column * ITEM_BOX_W;
 
     return commit_x_left;
 }
@@ -324,14 +310,14 @@ static inline int
 ggit_graph_commit_screen_x_center(struct ggit_graph* graph, int commit_index)
 {
     int const commit_x_left = ggit_graph_commit_screen_x_left(graph, commit_index);
-    int const commit_x_center = (ITEM_OUTER_W / 2) + commit_x_left;
+    int const commit_x_center = (ITEM_BOX_W / 2) + commit_x_left;
     return commit_x_center;
 }
 
 static inline int
 ggit_graph_commit_screen_y_top(int graph_width, int graph_height, int commit_index)
 {
-    int const commit_y_top = ITEM_OUTER_H * (graph_height - 1 - commit_index) + BORDER;
+    int const commit_y_top = ITEM_BOX_H * (graph_height - 1 - commit_index);
     return commit_y_top;
 }
 static inline int
@@ -342,7 +328,7 @@ ggit_graph_commit_screen_y_center(int graph_width, int graph_height, int commit_
         graph_height,
         commit_index
     );
-    int const commit_y_center = (ITEM_OUTER_H / 2) + commit_y_top;
+    int const commit_y_center = (ITEM_BOX_H / 2) + commit_y_top;
     return commit_y_center;
 }
 
@@ -353,6 +339,9 @@ ggit_graph_draw(
     TTF_Font* font_monospaced
 )
 {
+    int const g_width = graph->width;
+    int const g_height = graph->height;
+
     int const text_x = (graph->width + 2) * ITEM_OUTER_W + 16;
 
     // Draw the text to the right.
@@ -372,60 +361,73 @@ ggit_graph_draw(
     }
 
     // Draw lines between the commits.
+    set_color(renderer, (SDL_Color){ 0xAA, 0xAA, 0xAA, 0xFF });
     for (int i = 0; i < graph->height; ++i) {
         int const commit_i = graph->height - 1 - i;
 
         int const commit_x = ggit_graph_commit_screen_x_left(graph, commit_i);
         int const commit_y = ggit_graph_commit_screen_y_center(
-            graph->width,
-            graph->height,
+            g_width,
+            g_height,
             commit_i
         );
         int const commit_center_x = ggit_graph_commit_screen_x_center(graph, commit_i);
-        int const commit_center_y = ggit_graph_commit_screen_y_center(
-            graph->width,
-            graph->height,
-            commit_i
-        );
-        /* TODO: Yank this out of the loop. */
-        for (int j = 0; j < 2; ++j) {
+        int const commit_y_bottom = commit_y + ITEM_H / 2 + BORDER + MARGIN_Y;
+
+        for (int j = 0; j < ARRAY_COUNT(graph->parents->parent); ++j) {
             int parent = graph->parents[commit_i].parent[j];
-            if (parent != -1) {
-                set_color(renderer, (SDL_Color){ 0xAA, 0xAA, 0xAA, 0xFF });
+            if (parent == -1)
+                break;
 
-                int const parent_center_x = ggit_graph_commit_screen_x_center(
-                    graph,
-                    parent
-                );
-                int const parent_y_top = ggit_graph_commit_screen_y_top(
-                    graph->width,
-                    graph->height,
-                    parent
-                );
+            int const parent_center_x = ggit_graph_commit_screen_x_center(
+                graph,
+                parent
+            );
+            int const parent_y_top = ggit_graph_commit_screen_y_top(
+                g_width,
+                g_height,
+                parent
+            );
 
-                SDL_RenderDrawLine(
-                    renderer,
-                    commit_center_x,
-                    commit_center_y,
-                    parent_center_x,
-                    parent_y_top
-                );
-            }
+            // Connective (for current commit)
+            SDL_RenderDrawLine(
+                renderer,
+                commit_center_x,
+                commit_y_bottom,
+                commit_center_x,
+                commit_y
+            );
+            SDL_RenderDrawLine(
+                renderer,
+                commit_center_x,
+                commit_y_bottom,
+                parent_center_x,
+                parent_y_top
+            );
+            SDL_RenderDrawLine(
+                renderer,
+                parent_center_x,
+                parent_y_top,
+                parent_center_x,
+                parent_y_top + MARGIN_Y
+            );
         }
     }
 
     // Draw the blocks.
-    for (int i = 0; i < graph->height; ++i) {
-        int const commit_i = graph->height - 1 - i;
+    for (int i = 0; i < g_height; ++i) {
+        int const commit_i = g_height - 1 - i;
         int const tag = graph->tags[commit_i].tag[0];
         int const column = tag;
 
-        int const commit_x = ggit_graph_commit_screen_x_left(graph, i);
-        int const commit_y = ggit_graph_commit_screen_y_top(
-            graph->width,
-            graph->height,
-            i
-        );
+        int const commit_x = MARGIN_X
+                             + ggit_graph_commit_screen_x_left(graph, commit_i);
+        int const commit_y = MARGIN_Y
+                             + ggit_graph_commit_screen_y_top(
+                                 g_width,
+                                 g_height,
+                                 commit_i
+                             );
 
         int const cut = 3;
 
@@ -436,12 +438,11 @@ ggit_graph_draw(
             commit_x + ITEM_OUTER_W,
             commit_y + ITEM_OUTER_H,
             cut,
-            (SDL_Color){ 0xE3, 0xE3, 0xE3, 0xFF }
+            GGIT_COLOR_BORDER
         );
 
-        SDL_Color color = tag < ARRAY_COUNT(colors)
-                              ? color = colors[tag]
-                              : (SDL_Color){ 0xEE, 0xEE, 0xEE, 0xFF };
+        int color_index = min(ARRAY_COUNT(GGIT_COLORS) - 1, tag);
+        SDL_Color color = GGIT_COLORS[color_index];
         draw_rect_cut(
             renderer,
             commit_x + BORDER,
@@ -471,8 +472,8 @@ main(int argc, char** argv)
 
     struct ggit_graph graph;
     ggit_graph_init(&graph);
-    ggit_graph_load(&graph, "D:/public/ggit/tests/1");
-
+    ggit_graph_load(&graph, "D:/public/ggit/tests/2");
+    // ggit_graph_load(&graph, "C:/Projects/ColumboMonorepo");
 
     bool running = true;
     while (running) {
