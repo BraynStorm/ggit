@@ -454,6 +454,13 @@ ggit_ui_draw_graph(
                 commit_center_x,
                 commit_y_bottom,
                 parent_center_x,
+                commit_y_bottom
+            );
+            SDL_RenderDrawLine(
+                renderer,
+                parent_center_x,
+                commit_y_bottom,
+                parent_center_x,
                 parent_y_top
             );
             SDL_RenderDrawLine(
