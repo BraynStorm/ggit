@@ -31,7 +31,7 @@
 
 #include "ggit-ui-settings.h"
 
-struct Input
+struct ggit_input
 {
     int mouse_x;
     int mouse_y;
@@ -367,8 +367,15 @@ ggit_graph_commit_screen_y_center(int graph_width, int graph_height, int commit_
     return commit_y_center;
 }
 
+struct ggit_ui
+{
+    int graph_x;
+    int graph_y;
+};
+
 static void
-ggit_graph_draw(
+ggit_ui_draw_graph(
+    struct ggit_ui* ui,
     struct ggit_graph* graph,
     SDL_Renderer* renderer,
     TTF_Font* font_monospaced
@@ -377,21 +384,25 @@ ggit_graph_draw(
     int const g_width = graph->width;
     int const g_height = graph->height;
 
-    int const text_x = (graph->width + 2) * ITEM_OUTER_W + 16;
+    int const graph_x = ui->graph_x;
+    int const graph_y = ui->graph_y;
+
+    int const text_x = graph_x + (graph->width + 2) * ITEM_OUTER_W + 16;
 
     // Draw the text to the right.
     for (int i = 0; i < graph->height; ++i) {
         int const commit_i = graph->height - 1 - i;
+        int const commit_y = graph_y
+                             + ggit_graph_commit_screen_y_top(
+                                 graph->width,
+                                 graph->height,
+                                 commit_i
+                             );
+        if (commit_y > 2000 || commit_y < -20) {
+            continue;
+        }
         char const* message = graph->messages[commit_i];
-        util_draw_text(
-            renderer,
-            font_monospaced,
-            message,
-            text_x,
-            ggit_graph_commit_screen_y_top(graph->width, graph->height, commit_i),
-            0,
-            0
-        );
+        util_draw_text(renderer, font_monospaced, message, text_x, commit_y, 0, 0);
     }
 
     // Draw lines between the commits.
@@ -399,13 +410,18 @@ ggit_graph_draw(
     for (int i = 0; i < graph->height; ++i) {
         int const commit_i = graph->height - 1 - i;
 
-        int const commit_x = ggit_graph_commit_screen_x_left(graph, commit_i);
-        int const commit_y = ggit_graph_commit_screen_y_center(
-            g_width,
-            g_height,
-            commit_i
-        );
-        int const commit_center_x = ggit_graph_commit_screen_x_center(graph, commit_i);
+        int const commit_x = graph_x + ggit_graph_commit_screen_x_left(graph, commit_i);
+        int const commit_y = graph_y
+                             + ggit_graph_commit_screen_y_center(
+                                 g_width,
+                                 g_height,
+                                 commit_i
+                             );
+        int const commit_center_x = graph_x
+                                    + ggit_graph_commit_screen_x_center(
+                                        graph,
+                                        commit_i
+                                    );
         int const commit_y_bottom = commit_y + ITEM_H / 2 + BORDER + MARGIN_Y;
 
         for (int j = 0; j < ARRAY_COUNT(graph->parents->parent); ++j) {
@@ -413,15 +429,17 @@ ggit_graph_draw(
             if (parent == -1)
                 break;
 
-            int const parent_center_x = ggit_graph_commit_screen_x_center(
-                graph,
-                parent
-            );
-            int const parent_y_top = ggit_graph_commit_screen_y_top(
-                g_width,
-                g_height,
-                parent
-            );
+            int const parent_center_x = graph_x
+                                        + ggit_graph_commit_screen_x_center(
+                                            graph,
+                                            parent
+                                        );
+            int const parent_y_top = graph_y
+                                     + ggit_graph_commit_screen_y_top(
+                                         g_width,
+                                         g_height,
+                                         parent
+                                     );
 
             // Connective (for current commit)
             SDL_RenderDrawLine(
@@ -454,9 +472,9 @@ ggit_graph_draw(
         int const tag = graph->tags[commit_i].tag[0];
         int const column = tag;
 
-        int const commit_x = MARGIN_X
-                             + ggit_graph_commit_screen_x_left(graph, commit_i);
-        int const commit_y = MARGIN_Y
+        int const commit_x = MARGIN_X + graph_x
+                             + +ggit_graph_commit_screen_x_left(graph, commit_i);
+        int const commit_y = MARGIN_Y + graph_y
                              + ggit_graph_commit_screen_y_top(
                                  g_width,
                                  g_height,
@@ -489,6 +507,15 @@ ggit_graph_draw(
     }
 }
 
+static void
+ggit_ui_input(struct ggit_ui* ui, struct ggit_input* input, struct ggit_graph* graph)
+{
+    if (input->buttons[0]) {
+        ui->graph_x += input->delta_mouse_x;
+        ui->graph_y += input->delta_mouse_y;
+    }
+}
+
 int
 main(int argc, char** argv)
 {
@@ -496,16 +523,21 @@ main(int argc, char** argv)
     TTF_Init();
     SDL_Window* window;
     SDL_Renderer* renderer;
-    SDL_CreateWindowAndRenderer(1280, 720, SDL_WINDOW_RESIZABLE, &window, &renderer);
+    SDL_CreateWindowAndRenderer(
+        1280,
+        720,
+        SDL_WINDOW_RESIZABLE | SDL_WINDOW_MOUSE_FOCUS,
+        &window,
+        &renderer
+    );
     SDL_SetWindowTitle(window, "GGit");
     int window_width;
     int window_height;
     SDL_GetWindowSize(window, &window_width, &window_height);
     TTF_Font* font = TTF_OpenFont("res/segoeui.ttf", 14);
 
-    struct Input input = { 0 };
-
-
+    struct ggit_input input = { 0 };
+    struct ggit_ui ui = { 0 };
     struct ggit_graph graph;
     ggit_graph_init(&graph);
     ggit_vector_init(&graph.special_branches, sizeof(struct ggit_special_branch));
@@ -525,14 +557,17 @@ main(int argc, char** argv)
         );
     }
 
-    // ggit_graph_load(&graph, "D:/public/ggit/tests/1");
+    ggit_graph_load(&graph, "D:/public/ggit/tests/1");
     // ggit_graph_load(&graph, "D:/public/ggit/tests/2");
     // ggit_graph_load(&graph, "D:/public/ggit/tests/3");
     // ggit_graph_load(&graph, "D:/public/ggit/tests/tag-with-multiple-matches");
-    ggit_graph_load(&graph, "C:/Projects/ColumboMonorepo");
+    // ggit_graph_load(&graph, "C:/Projects/ColumboMonorepo");
 
     bool running = true;
     while (running) {
+        input.delta_mouse_x = 0;
+        input.delta_mouse_y = 0;
+
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
             switch (event.type) {
@@ -545,23 +580,28 @@ main(int argc, char** argv)
                             break;
                     }
                 case SDL_MOUSEMOTION:
+                    if (input.buttons[0]) {
+                        input.delta_mouse_x += event.motion.x - input.mouse_x;
+                        input.delta_mouse_y += event.motion.y - input.mouse_y;
+                    }
                     input.mouse_x = event.motion.x;
                     input.mouse_y = event.motion.y;
                     break;
                 case SDL_MOUSEBUTTONDOWN:
-                    input.buttons[event.button.button] = true;
+                    input.buttons[event.button.button - 1] = true;
                     break;
                 case SDL_MOUSEBUTTONUP:
-                    input.buttons[event.button.button] = false;
+                    input.buttons[event.button.button - 1] = false;
                     break;
                 case SDL_KEYDOWN: break;
                 case SDL_KEYUP: break;
             }
         }
 
+        ggit_ui_input(&ui, &input, &graph);
         SDL_SetRenderDrawColor(renderer, 220, 220, 220, 255);
         SDL_RenderClear(renderer);
-        ggit_graph_draw(&graph, renderer, font);
+        ggit_ui_draw_graph(&ui, &graph, renderer, font);
         SDL_RenderPresent(renderer);
     }
 end:;
