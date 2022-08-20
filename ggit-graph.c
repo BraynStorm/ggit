@@ -184,62 +184,72 @@ ggit_match_refs_to_commits(
 
     return 0;
 }
-static enum ggit_primary_tag
-ggit_local_branch_to_tag__known(char const* ref_name)
+// static enum ggit_primary_tag
+// ggit_local_branch_to_tag__known(char const* ref_name, int* offset)
+// {
+//     /* PERF(boz):
+//         Convert ot hashmap find operation for performance
+//     */
+//     if (starts_with(ref_name, "master"))
+//     else if (starts_with(ref_name, "feature"))
+//     else if (starts_with(ref_name, "bugfix"))
+//     else if (starts_with(ref_name, "hotfix"))
+//     else if (starts_with(ref_name, "release"))
+//     else if (starts_with(ref_name, "develop") || starts_with(ref_name, "sprint"))
+// }
+struct ggit_commit_tag
+ggit_branch_to_tag(char const* ref_name, struct ggit_vector* special_branches)
 {
-    /* PERF(boz):
-        Convert ot hashmap find operation for performance
-    */
-    if (starts_with(ref_name, "master"))
-        return ggit_primary_tag_master;
-    else if (starts_with(ref_name, "feature"))
-        return ggit_primary_tag_feature;
-    else if (starts_with(ref_name, "bugfix"))
-        return ggit_primary_tag_bugfix;
-    else if (starts_with(ref_name, "hotfix"))
-        return ggit_primary_tag_hotfix;
-    else if (starts_with(ref_name, "release"))
-        return ggit_primary_tag_release;
-    else if (starts_with(ref_name, "develop") || starts_with(ref_name, "sprint"))
-        return ggit_primary_tag_develop;
-    return ggit_primary_tag_none;
-}
-static enum ggit_primary_tag
-ggit_branch_to_tag(char const* ref_name, struct ggit_vector* branches)
-{
-    enum ggit_primary_tag tag = ggit_local_branch_to_tag__known(ref_name);
-    if (tag != ggit_primary_tag_none)
-        return tag;
+    struct ggit_commit_tag tag = { { -1, -1 }, true };
+    for (int i = 0; i < special_branches->size; ++i) {
+        struct ggit_special_branch* sb = ggit_vector_ref_special_branch(
+            special_branches,
+            i
+        );
 
-    /* The branch was not "special", we need to assign a column for it. */
-    for (int i = 0; i < branches->size; ++i) {
-        char const* i_name = ggit_vector_get_string(branches, i);
-        if (0 == strcmp(ref_name, i_name)) {
-            return i;
+        if (starts_with(ref_name, sb->match)) {
+            int n_instances = sb->instances.size;
+            tag.tag[0] = i;
+            for (int j = 0; j < n_instances; ++j) {
+                char* instance_name = ggit_vector_get_string(&sb->instances, j);
+
+                if (0 == strcmp(ref_name, instance_name)) {
+                    tag.tag[1] = j;
+                    break;
+                }
+            }
+
+            if (tag.tag[1] == -1) {
+                tag.tag[1] = n_instances;
+                char* sub_name = _strdup(ref_name);
+                ggit_vector_push(&sb->instances, &sub_name);
+            }
+            break;
         }
     }
-
-    char* ref_name_dup = strndup(strlen(ref_name), ref_name);
-    ggit_vector_push(branches, &ref_name_dup);
-    return ggit_primary_tag_COUNT + (branches->size - 1);
+    if (tag.tag[0] == -1)
+        fprintf(stderr, "Ignoring ref %s - no matching special branches.\n", ref_name);
+    return tag;
 }
 
-static enum ggit_primary_tag
-ggit_refname_to_tag(char const* ref_name, struct ggit_vector* branches)
+static struct ggit_commit_tag
+ggit_refname_to_tag(char const* ref_name, struct ggit_vector* special_branches)
 {
     char const prefix_local_branch[] = "refs/heads/";
     char const prefix_remote_branch[] = "refs/remotes/origin/";
     /* TODO: support git tags and other things. */
     if (starts_with(ref_name, prefix_local_branch))
-        return ggit_branch_to_tag(ref_name + sizeof(prefix_local_branch) - 1, branches);
+        return ggit_branch_to_tag(
+            ref_name + sizeof(prefix_local_branch) - 1,
+            special_branches
+        );
     else if (starts_with(ref_name, prefix_remote_branch))
         return ggit_branch_to_tag(
             ref_name + sizeof(prefix_remote_branch) - 1,
-            branches
+            special_branches
         );
-    else {
-        return ggit_primary_tag_none;
-    }
+    else
+        return (struct ggit_commit_tag){ { -1, -1 } };
 }
 
 static int
@@ -248,7 +258,7 @@ ggit_label_merge_commits(
     struct ggit_vector* restrict commit_messages,
     struct ggit_vector* restrict commit_parents,
     struct ggit_vector* restrict commit_tags,
-    struct ggit_vector* restrict branches
+    struct ggit_vector* restrict special_branches
 )
 {
     int count = commit_message_lengths->size;
@@ -274,23 +284,28 @@ ggit_label_merge_commits(
         char* name_kink = 0;
         ggit_parse_merge_commit(msg_len, msg, &name_main, &name_kink);
 
-        enum ggit_primary_tag tag_main = ggit_primary_tag_none;
+        struct ggit_commit_tag tag_main = { { -1, -1 }, true };
+        struct ggit_commit_tag tag_kink = { { -1, -1 }, true };
         if (name_main)
-            tag_main = ggit_branch_to_tag(name_main, branches);
-
-        enum ggit_primary_tag tag_kink = ggit_primary_tag_none;
+            tag_main = ggit_branch_to_tag(name_main, special_branches);
         if (name_kink)
-            tag_kink = ggit_branch_to_tag(name_kink, branches);
+            tag_kink = ggit_branch_to_tag(name_kink, special_branches);
 
-        short* my_tags = ggit_vector_ref_commit_tags(commit_tags, c)->tag;
-        short* p0_tags = ggit_vector_ref_commit_tags(commit_tags, my_parents[0])->tag;
-        short* p1_tags = ggit_vector_ref_commit_tags(commit_tags, my_parents[1])->tag;
+        struct ggit_commit_tag* my_tags = ggit_vector_ref_commit_tags(commit_tags, c);
+        struct ggit_commit_tag* p0_tags = ggit_vector_ref_commit_tags(
+            commit_tags,
+            my_parents[0]
+        );
+        struct ggit_commit_tag* p1_tags = ggit_vector_ref_commit_tags(
+            commit_tags,
+            my_parents[1]
+        );
 
-        my_tags[0] = p0_tags[0] = tag_main;
-        p1_tags[0] = tag_kink;
+        *my_tags = *p0_tags = tag_main;
+        *p1_tags = tag_kink;
 
-        width = max(tag_main, width);
-        width = max(tag_kink, width);
+        width = max(tag_main.tag[0], width);
+        width = max(tag_kink.tag[0], width);
     }
     return width;
 }
@@ -313,14 +328,22 @@ ggit_propagate_tags(
         int const* my_parents = ggit_vector_ref_commit_parents(commit_parents, c)
                                     ->parent;
         if (my_parents[0] != -1) {
-            short const* my_tags = ggit_vector_ref_commit_tags(commit_tags, c)->tag;
-            short* p0_tags = ggit_vector_ref_commit_tags(commit_tags, my_parents[0])
-                                 ->tag;
-            if (p0_tags[0] == ggit_primary_tag_none) {
-                p0_tags[0] = my_tags[0];
+            struct ggit_commit_tag const* my_tags = ggit_vector_ref_commit_tags(
+                commit_tags,
+                c
+            );
+            struct ggit_commit_tag* p0_tags = ggit_vector_ref_commit_tags(
+                commit_tags,
+                my_parents[0]
+            );
+            if (p0_tags->strong) {
+                continue;
+            } else {
+                if (p0_tags->tag[0] == -1 || p0_tags->tag[0] > my_tags->tag[0]) {
+                    *p0_tags = *my_tags;
+                    p0_tags->strong = false;
+                }
             }
-            // p0_tags[0] = NK_MIN(my_tags[0], p0_tags[0]);
-            /* TODO(boz): Propagate the other tags as well. */
         }
     }
 }
@@ -343,6 +366,13 @@ ggit_graph_load_repository(
     int const heuristic_commits = 4096;
 
     out_graph->width = 1;
+    for (int i = 0; i < out_graph->special_branches.size; ++i) {
+        struct ggit_special_branch* sb = ggit_vector_ref_special_branch(
+            &out_graph->special_branches,
+            i
+        );
+        ggit_vector_clear(&sb->instances);
+    }
 
     GGIT_VECTOR_DEFINE(ref_names, char*, heuristic_refs);
     GGIT_VECTOR_DEFINE(ref_hashes, char[40], heuristic_refs);
@@ -355,8 +385,6 @@ ggit_graph_load_repository(
     GGIT_VECTOR_DEFINE(commit_hashes, char*, heuristic_commits);
     GGIT_VECTOR_DEFINE(commit_parents, struct ggit_commit_parents, heuristic_commits);
     GGIT_VECTOR_DEFINE(commit_tags, struct ggit_commit_tag, heuristic_commits);
-
-    GGIT_VECTOR_DEFINE(branches, char*, heuristic_commits / 5);
 
     ggit_load_refs(refs_len, refs, &ref_names, &ref_hashes);
 
@@ -437,8 +465,8 @@ ggit_graph_load_repository(
                 ggit_vector_push(&commit_hashes, &hash);
                 struct ggit_commit_tag tags = {
                     {
-                        ggit_primary_tag_none,
-                        ggit_primary_tag_none,
+                        -1,
+                        -1,
                     },
                 };
                 ggit_vector_push(&commit_tags, &tags);
@@ -451,27 +479,34 @@ ggit_graph_load_repository(
     for (int i = 0; i < ref_y.size; ++i) {
         char* ref_name = ggit_vector_get_string(&ref_names, i);
         int index = ggit_vector_get_i32(&ref_y, i);
-        short* tags = ggit_vector_ref_commit_tags(&commit_tags, index)->tag;
+        struct ggit_commit_tag* tags = ggit_vector_ref_commit_tags(&commit_tags, index);
 
-        short ref_tag = ggit_refname_to_tag(ref_name, &branches);
-        if (ref_tag != ggit_primary_tag_none) {
-            tags[0] = ref_tag;
+        struct ggit_commit_tag ref_tag = ggit_refname_to_tag(
+            ref_name,
+            &out_graph->special_branches
+        );
+        if (ref_tag.tag[0] != -1) {
+            *tags = ref_tag;
         }
-        w0 = max(ref_tag, w0);
+        w0 = max(ref_tag.tag[0], w0);
     }
     int w1 = ggit_label_merge_commits(
         &commit_message_lengths,
         &commit_messages,
         &commit_parents,
         &commit_tags,
-        &branches
+        &out_graph->special_branches
     );
     ggit_propagate_tags(&commit_parents, &commit_tags);
     out_graph->width = max(w0, w1);
-
-    for (int i = 0; i < branches.size; ++i)
-        free(ggit_vector_get_string(&branches, i));
-    ggit_vector_destroy(&branches);
+    out_graph->width = 0;
+    for (int i = 0; i < out_graph->special_branches.size; ++i) {
+        struct ggit_special_branch* branch = ggit_vector_ref_special_branch(
+            &out_graph->special_branches,
+            i
+        );
+        out_graph->width += branch->instances.size;
+    }
 
     out_graph->hashes = (char**)commit_hashes.data;
     out_graph->message_lengths = (int*)commit_message_lengths.data;
@@ -486,6 +521,7 @@ int
 ggit_graph_init(struct ggit_graph* graph)
 {
     memset(graph, 0, sizeof(*graph));
+    ggit_vector_init(&graph->special_branches, sizeof(struct ggit_special_branch));
     return 0;
 }
 void
@@ -493,6 +529,7 @@ ggit_graph_clear(struct ggit_graph* graph)
 {
     graph->width = 0;
     graph->height = 0;
+    ggit_vector_clear(&graph->special_branches);
 }
 void
 ggit_graph_destroy(struct ggit_graph* graph)
@@ -507,6 +544,18 @@ ggit_graph_destroy(struct ggit_graph* graph)
     free(graph->hashes);
     free(graph->parents);
     free(graph->tags);
+    for (int i = 0; i < graph->special_branches.size; ++i) {
+        struct ggit_special_branch* sb = ggit_vector_ref_special_branch(
+            &graph->special_branches,
+            i
+        );
+        free(sb->match);
+        for (int j = 0; j < sb->instances.size; ++j) {
+            free(ggit_vector_get_string(&sb->instances, j));
+        }
+        ggit_vector_destroy(&sb->instances);
+    }
+    ggit_vector_destroy(&graph->special_branches);
 }
 int
 ggit_graph_load(struct ggit_graph* graph, char const* path_repository)

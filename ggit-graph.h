@@ -1,5 +1,6 @@
 #pragma once
 
+#include "ggit-vector.h"
 #include "ggit-ui-settings.h"
 
 struct ggit_commit_parents
@@ -29,20 +30,37 @@ struct ggit_commit_tag
                 tag[1] = 1
     */
     short tag[2];
-};
-
-enum ggit_primary_tag
-{
-#define X(name, ...) ggit_primary_tag_##name,
-    GGIT_MAP_ENUM
-#undef X
-    /*  */
-    ggit_primary_tag_COUNT,
+    bool strong;
 };
 
 struct ggit_tag_entry
 {
     char* tag_name;
+};
+
+enum ggit_growth_direction
+{
+    ggit_growth_direction_left = -1,
+    ggit_growth_direction_right = 1,
+};
+
+struct ggit_special_branch
+{
+    /* Like: "release/" */
+    char* match;
+    /* TODO: add display name. */
+
+    /* Valid values:
+        -1 = left
+        +1 = right
+    */
+    int8_t growth_direction;
+
+    /* Two colors, three bytes each (RGB). */
+    uint8_t colors_base[2][3];
+
+    /* vector of char* */
+    struct ggit_vector instances;
 };
 
 struct ggit_graph
@@ -55,6 +73,8 @@ struct ggit_graph
     char** hashes;
     struct ggit_commit_parents* parents;
     struct ggit_commit_tag* tags;
+
+    struct ggit_vector special_branches;
 };
 
 // clang-format align
@@ -62,3 +82,8 @@ int ggit_graph_init(struct ggit_graph*);
 void ggit_graph_destroy(struct ggit_graph*);
 void ggit_graph_clear(struct ggit_graph*);
 int ggit_graph_load(struct ggit_graph*, char const* path_repository);
+
+void ggit_special_branch_clear(struct ggit_special_branch*);
+void ggit_special_branch_destroy(struct ggit_special_branch*);
+
+GGIT_GENERATE_VECTOR_REF_GETTER(struct ggit_special_branch, special_branch)

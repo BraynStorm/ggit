@@ -22,9 +22,9 @@ static SDL_Color const GGIT_COLOR_VLINE = { 0x9B, 0x9B, 0x9B, 0xFF };
 static SDL_Color const GGIT_COLOR_HLINE = { 0xDA, 0xDA, 0xDA, 0xFF };
 static SDL_Color const GGIT_COLOR_BORDER = { 0xE3, 0xE3, 0xE3, 0xFF };
 
-static int const ITEM_W = 38 * 0.8;
-static int const ITEM_H = 26 * 0.8;
-static int const BORDER = 2;
+static int const ITEM_W = 16;
+static int const ITEM_H = 12;
+static int const BORDER = 1;
 static int const MARGIN_X = 2;
 static int const MARGIN_Y = 4;
 

@@ -61,4 +61,5 @@ GGIT_GENERATE_VECTOR_GETTERS(char*, string)
 
 GGIT_GENERATE_VECTOR_GETTERS(int*, intptr)
 
+GGIT_GENERATE_VECTOR_REF_GETTER(struct ggit_vector, vector);
 #endif
