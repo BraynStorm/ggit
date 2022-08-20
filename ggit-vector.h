@@ -16,6 +16,7 @@ struct ggit_vector
 void  ggit_vector_init        (struct ggit_vector* vec, int value_size);
 void  ggit_vector_destroy     (struct ggit_vector* vec);
 void  ggit_vector_clear       (struct ggit_vector* vec);
+void  ggit_vector_clear_and_free(struct ggit_vector* vec);
 void  ggit_vector_insert      (struct ggit_vector* vec, int index, void* value);
 void  ggit_vector_push        (struct ggit_vector* vec, void* value);
 void  ggit_vector_reserve     (struct ggit_vector* vec, int at_least);

@@ -74,6 +74,16 @@ ggit_vector_clear(struct ggit_vector* vec)
     vec->size = 0;
 }
 void
+ggit_vector_clear_and_free(struct ggit_vector* vec)
+{
+    assert(vec->value_size == sizeof(void*));
+
+    for (int i = 0; i < vec->size; ++i)
+        free(((void**)vec->data)[i]);
+
+    ggit_vector_clear(vec);
+}
+void
 ggit_vector_insert(struct ggit_vector* vec, int index, void* value)
 {
     int const size = vec->size;

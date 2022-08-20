@@ -75,6 +75,10 @@ struct ggit_graph
     struct ggit_commit_tag* tags;
 
     struct ggit_vector special_branches;
+
+    struct ggit_vector ref_names;
+    struct ggit_vector ref_hashes;
+    struct ggit_vector ref_commits;
 };
 
 // clang-format align

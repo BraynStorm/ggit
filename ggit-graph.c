@@ -163,7 +163,7 @@ static int
 ggit_match_refs_to_commits(
     struct ggit_vector* restrict ref_hashes,
     struct ggit_vector* restrict commit_hashes,
-    struct ggit_vector* restrict out_ref_y
+    struct ggit_vector* restrict out_ref_commits
 )
 {
     int count_refs = ref_hashes->size;
@@ -176,7 +176,7 @@ ggit_match_refs_to_commits(
             int commit_hash_len = (int)strlen(commit_hash);
 
             if (0 == strncmp(commit_hash, ref_hash, commit_hash_len)) {
-                ggit_vector_push(out_ref_y, &c);
+                ggit_vector_push(out_ref_commits, &c);
                 break;
             }
         }
@@ -304,6 +304,9 @@ ggit_label_merge_commits(
         *my_tags = *p0_tags = tag_main;
         *p1_tags = tag_kink;
 
+        free(name_main);
+        free(name_kink);
+
         width = max(tag_main.tag[0], width);
         width = max(tag_kink.tag[0], width);
     }
@@ -325,16 +328,16 @@ ggit_propagate_tags(
     int count = commit_parents->size;
     assert(commit_tags->size == count);
     for (int c = count - 1; c >= 0; --c) {
-        int const* my_parents = ggit_vector_ref_commit_parents(commit_parents, c)
-                                    ->parent;
-        if (my_parents[0] != -1) {
+        int const my_parent = ggit_vector_ref_commit_parents(commit_parents, c)
+                                  ->parent[0];
+        if (my_parent != -1) {
             struct ggit_commit_tag const* my_tags = ggit_vector_ref_commit_tags(
                 commit_tags,
                 c
             );
             struct ggit_commit_tag* p0_tags = ggit_vector_ref_commit_tags(
                 commit_tags,
-                my_parents[0]
+                my_parent
             );
             if (p0_tags->strong) {
                 continue;
@@ -365,19 +368,7 @@ ggit_graph_load_repository(
     int const heuristic_refs = 512;
     int const heuristic_commits = 4096;
 
-    out_graph->width = 1;
-    for (int i = 0; i < out_graph->special_branches.size; ++i) {
-        struct ggit_special_branch* sb = ggit_vector_ref_special_branch(
-            &out_graph->special_branches,
-            i
-        );
-        ggit_vector_clear(&sb->instances);
-    }
-
-    GGIT_VECTOR_DEFINE(ref_names, char*, heuristic_refs);
-    GGIT_VECTOR_DEFINE(ref_hashes, char[40], heuristic_refs);
-    /* TODO: can use the size of the ref_names. */
-    GGIT_VECTOR_DEFINE(ref_y, int, heuristic_refs);
+    ggit_graph_clear(out_graph);
 
     GGIT_VECTOR_DEFINE(commit_messages, char*, heuristic_commits);
     GGIT_VECTOR_DEFINE(commit_message_lengths, int, heuristic_commits);
@@ -386,7 +377,7 @@ ggit_graph_load_repository(
     GGIT_VECTOR_DEFINE(commit_parents, struct ggit_commit_parents, heuristic_commits);
     GGIT_VECTOR_DEFINE(commit_tags, struct ggit_commit_tag, heuristic_commits);
 
-    ggit_load_refs(refs_len, refs, &ref_names, &ref_hashes);
+    ggit_load_refs(refs_len, refs, &out_graph->ref_names, &out_graph->ref_hashes);
 
     int last_pipe = -1;
     int n = 0;
@@ -474,11 +465,15 @@ ggit_graph_load_repository(
         }
     }
 
-    ggit_match_refs_to_commits(&ref_hashes, &commit_hashes, &ref_y);
+    ggit_match_refs_to_commits(
+        &out_graph->ref_hashes,
+        &commit_hashes,
+        &out_graph->ref_commits
+    );
     int w0 = 0;
-    for (int i = 0; i < ref_y.size; ++i) {
-        char* ref_name = ggit_vector_get_string(&ref_names, i);
-        int index = ggit_vector_get_i32(&ref_y, i);
+    for (int i = 0; i < out_graph->ref_commits.size; ++i) {
+        char* ref_name = ggit_vector_get_string(&out_graph->ref_names, i);
+        int index = ggit_vector_get_i32(&out_graph->ref_commits, i);
         struct ggit_commit_tag* tags = ggit_vector_ref_commit_tags(&commit_tags, index);
 
         struct ggit_commit_tag ref_tag = ggit_refname_to_tag(
@@ -521,41 +516,63 @@ int
 ggit_graph_init(struct ggit_graph* graph)
 {
     memset(graph, 0, sizeof(*graph));
+
     ggit_vector_init(&graph->special_branches, sizeof(struct ggit_special_branch));
+
+    ggit_vector_init(&graph->ref_names, sizeof(char*));
+    ggit_vector_init(&graph->ref_hashes, sizeof(char[40]));
+    ggit_vector_init(&graph->ref_commits, sizeof(int));
     return 0;
 }
 void
 ggit_graph_clear(struct ggit_graph* graph)
 {
+    free(graph->message_lengths);
+
+    for (int i = 0; i < graph->height; ++i)
+        free(graph->messages[i]);
+    free(graph->messages);
+
+    for (int i = 0; i < graph->height; ++i)
+        free(graph->hashes[i]);
+    free(graph->hashes);
+
+    free(graph->parents);
+    free(graph->tags);
+
     graph->width = 0;
     graph->height = 0;
-    ggit_vector_clear(&graph->special_branches);
+
+    for (int i = 0; i < graph->special_branches.size; ++i) {
+        struct ggit_special_branch* sb = ggit_vector_ref_special_branch(
+            &graph->special_branches,
+            i
+        );
+        ggit_vector_clear_and_free(&sb->instances);
+    }
+
+    ggit_vector_clear_and_free(&graph->ref_names);
+    ggit_vector_clear(&graph->ref_hashes);
+    ggit_vector_clear(&graph->ref_commits);
 }
 void
 ggit_graph_destroy(struct ggit_graph* graph)
 {
-    for (int i = 0; i < graph->height; ++i)
-        free(graph->messages[i]);
+    ggit_graph_clear(graph);
 
-    graph->width = 0;
-    graph->height = 0;
-    free(graph->message_lengths);
-    free(graph->messages);
-    free(graph->hashes);
-    free(graph->parents);
-    free(graph->tags);
     for (int i = 0; i < graph->special_branches.size; ++i) {
         struct ggit_special_branch* sb = ggit_vector_ref_special_branch(
             &graph->special_branches,
             i
         );
         free(sb->match);
-        for (int j = 0; j < sb->instances.size; ++j) {
-            free(ggit_vector_get_string(&sb->instances, j));
-        }
         ggit_vector_destroy(&sb->instances);
     }
     ggit_vector_destroy(&graph->special_branches);
+
+    ggit_vector_destroy(&graph->ref_names);
+    ggit_vector_destroy(&graph->ref_hashes);
+    ggit_vector_destroy(&graph->ref_commits);
 }
 int
 ggit_graph_load(struct ggit_graph* graph, char const* path_repository)

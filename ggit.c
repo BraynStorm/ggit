@@ -398,9 +398,6 @@ ggit_ui_draw_graph(
                                  graph->height,
                                  commit_i
                              );
-        if (commit_y > 2000 || commit_y < -20) {
-            continue;
-        }
         char const* message = graph->messages[commit_i];
         util_draw_text(renderer, font_monospaced, message, text_x, commit_y, 0, 0);
     }
@@ -424,6 +421,7 @@ ggit_ui_draw_graph(
                                     );
         int const commit_y_bottom = commit_y + ITEM_H / 2 + BORDER + MARGIN_Y;
 
+        bool is_merge = graph->parents[commit_i].parent[1] != -1;
         for (int j = 0; j < ARRAY_COUNT(graph->parents->parent); ++j) {
             int parent = graph->parents[commit_i].parent[j];
             if (parent == -1)
@@ -441,21 +439,25 @@ ggit_ui_draw_graph(
                                          parent
                                      );
 
-            // Connective (for current commit)
+            int offset_merge = is_merge * -2;
+
+            // Commit - center to bottom
             SDL_RenderDrawLine(
                 renderer,
                 commit_center_x,
-                commit_y_bottom,
+                commit_y_bottom + offset_merge,
                 commit_center_x,
                 commit_y
             );
+            // Middle - left/right to match parent column
             SDL_RenderDrawLine(
                 renderer,
                 commit_center_x,
-                commit_y_bottom,
+                commit_y_bottom + offset_merge,
                 parent_center_x,
                 commit_y_bottom
             );
+            // Middle - down to match parent Top
             SDL_RenderDrawLine(
                 renderer,
                 parent_center_x,
@@ -463,6 +465,7 @@ ggit_ui_draw_graph(
                 parent_center_x,
                 parent_y_top
             );
+            // Parent - center to top.
             SDL_RenderDrawLine(
                 renderer,
                 parent_center_x,
@@ -480,25 +483,16 @@ ggit_ui_draw_graph(
         int const column = tag;
 
         int const commit_x = MARGIN_X + graph_x
-                             + +ggit_graph_commit_screen_x_left(graph, commit_i);
+                             + ggit_graph_commit_screen_x_left(graph, commit_i);
         int const commit_y = MARGIN_Y + graph_y
                              + ggit_graph_commit_screen_y_top(
                                  g_width,
                                  g_height,
                                  commit_i
                              );
+        bool is_merge = graph->parents[commit_i].parent[1] != -1;
 
-        int const cut = 3;
-
-        draw_rect_cut(
-            renderer,
-            commit_x,
-            commit_y,
-            commit_x + ITEM_OUTER_W,
-            commit_y + ITEM_OUTER_H,
-            cut,
-            GGIT_COLOR_BORDER
-        );
+        int const cut = 3 + 2 * is_merge;
 
         int color_index = min(ARRAY_COUNT(GGIT_COLORS) - 1, tag);
         SDL_Color color = GGIT_COLORS[color_index];
@@ -564,9 +558,9 @@ main(int argc, char** argv)
         );
     }
 
-    ggit_graph_load(&graph, "D:/public/ggit/tests/1");
+    // ggit_graph_load(&graph, "D:/public/ggit/tests/1");
     // ggit_graph_load(&graph, "D:/public/ggit/tests/2");
-    // ggit_graph_load(&graph, "D:/public/ggit/tests/3");
+    ggit_graph_load(&graph, "D:/public/ggit/tests/3");
     // ggit_graph_load(&graph, "D:/public/ggit/tests/tag-with-multiple-matches");
     // ggit_graph_load(&graph, "C:/Projects/ColumboMonorepo");
 
@@ -600,7 +594,12 @@ main(int argc, char** argv)
                 case SDL_MOUSEBUTTONUP:
                     input.buttons[event.button.button - 1] = false;
                     break;
-                case SDL_KEYDOWN: break;
+                case SDL_KEYDOWN:
+                    if (event.key.keysym.scancode == SDL_SCANCODE_F5) {
+                        ggit_graph_load(&graph, "D:/public/ggit/tests/3");
+                    }
+                    break;
+
                 case SDL_KEYUP: break;
             }
         }
