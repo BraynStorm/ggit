@@ -265,10 +265,11 @@ util_draw_text(
     if (!text_h)
         text_h = &text_h_dummy;
 
-    SDL_Surface* text_surface = TTF_RenderUTF8_Solid(
+    SDL_Surface* text_surface = TTF_RenderUTF8_LCD(
         font,
         text,
-        (SDL_Color){ 0, 0, 0, 255 } // , (SDL_Color){ 255, 255, 255, 255 }
+        (SDL_Color){ 0x05, 0x05, 0x05, 0xFF },
+        (SDL_Color){ 220, 220, 220, 0xFF }
     );
     SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, text_surface);
     TTF_SizeUTF8(font, text, text_w, text_h);
@@ -296,19 +297,43 @@ set_color(SDL_Renderer* renderer, SDL_Color color)
 static inline int
 ggit_graph_commit_screen_x_left(struct ggit_graph* graph, int commit_index)
 {
-    short* tag = graph->tags[commit_index].tag;
-    int column = 0;
-    for (int i = 0; i < graph->special_branches.size; ++i) {
-        struct ggit_special_branch* branch = ggit_vector_ref_special_branch(
-            &graph->special_branches,
-            i
-        );
-        if (i >= tag[0])
-            break;
+    struct ggit_commit_tag const tag = graph->tags[commit_index];
+    int const branch = tag.tag[0];
+    int const index = tag.tag[1];
+    struct ggit_special_branch const* commit_branch = ggit_vector_ref_special_branch(
+        &graph->special_branches,
+        branch
+    );
 
-        column += branch->instances.size;
-    }
-    int index = tag[1];
+    int column = 0;
+    bool stop = false;
+
+    if (commit_branch->growth_direction >= 0)
+        for (int i = 0; i < graph->special_branches.size; ++i) {
+            struct ggit_special_branch* i_branch = ggit_vector_ref_special_branch(
+                &graph->special_branches,
+                i
+            );
+            if (!stop) {
+                if (i == branch)
+                    stop = true;
+                else
+                    column += i_branch->instances.size;
+            } else if (i_branch->growth_direction < 0)
+                column += i_branch->instances.size;
+        }
+    else
+        for (int i = 0; i < graph->special_branches.size; ++i) {
+            if (i == branch)
+                break;
+
+            struct ggit_special_branch* i_branch = ggit_vector_ref_special_branch(
+                &graph->special_branches,
+                i
+            );
+            if (i_branch->growth_direction < 0)
+                column += i_branch->instances.size;
+        }
     column += index;
 
     int const commit_x_left = column * ITEM_BOX_W;
@@ -355,7 +380,6 @@ ggit_graph_draw(
     int const text_x = (graph->width + 2) * ITEM_OUTER_W + 16;
 
     // Draw the text to the right.
-    set_color(renderer, (SDL_Color){ 0x05, 0x05, 0x05, 0xFF });
     for (int i = 0; i < graph->height; ++i) {
         int const commit_i = graph->height - 1 - i;
         char const* message = graph->messages[commit_i];
@@ -486,13 +510,13 @@ main(int argc, char** argv)
     ggit_graph_init(&graph);
     ggit_vector_init(&graph.special_branches, sizeof(struct ggit_special_branch));
     // clang-format off
-    ggit_vector_push(&graph.special_branches, &(struct ggit_special_branch){ "master", +1, { [0] = { 0x7E, 0xD3, 0x21 }, [1] = {} } });
-    ggit_vector_push(&graph.special_branches, &(struct ggit_special_branch){ "hotfix/", +1, { [0] = { 0xE6, 0x00, 0x00 }, [1] = {} } });
+    ggit_vector_push(&graph.special_branches, &(struct ggit_special_branch){ "master", 0, { [0] = { 0x7E, 0xD3, 0x21 }, [1] = {} } });
+    ggit_vector_push(&graph.special_branches, &(struct ggit_special_branch){ "hotfix/", -1, { [0] = { 0xE6, 0x00, 0x00 }, [1] = {} } });
     ggit_vector_push(&graph.special_branches, &(struct ggit_special_branch){ "release/", -1, { [0] = { 0x00, 0x68, 0xDE }, [1] = {} } });
-    ggit_vector_push(&graph.special_branches, &(struct ggit_special_branch){ "bugfix/", -1, { [0] = { 0xE6, 0x96, 0x17 }, [1] = {} } });
-    ggit_vector_push(&graph.special_branches, &(struct ggit_special_branch){ "develop/", -1, { [0] = { 0xB8, 0x16, 0xD9 }, [1] = {} } });
-    ggit_vector_push(&graph.special_branches, &(struct ggit_special_branch){ "feature/", -1, { [0] = { 0x34, 0xD3, 0xE5 }, [1] = {} } });
-    ggit_vector_push(&graph.special_branches, &(struct ggit_special_branch){ "", -1, { [0] = { 0xEE, 0xEE, 0xEE }, [1] = {} } });
+    ggit_vector_push(&graph.special_branches, &(struct ggit_special_branch){ "bugfix/", +1, { [0] = { 0xE6, 0x96, 0x17 }, [1] = {} } });
+    ggit_vector_push(&graph.special_branches, &(struct ggit_special_branch){ "develop/", +1, { [0] = { 0xB8, 0x16, 0xD9 }, [1] = {} } });
+    ggit_vector_push(&graph.special_branches, &(struct ggit_special_branch){ "feature/", +1, { [0] = { 0x34, 0xD3, 0xE5 }, [1] = {} } });
+    ggit_vector_push(&graph.special_branches, &(struct ggit_special_branch){ "", +1, { [0] = { 0xEE, 0xEE, 0xEE }, [1] = {} } });
     // clang-format on
     for (int i = 0; i < graph.special_branches.size; ++i) {
         ggit_vector_init(
@@ -501,9 +525,11 @@ main(int argc, char** argv)
         );
     }
 
-    ggit_graph_load(&graph, "D:/public/ggit/tests/3");
+    // ggit_graph_load(&graph, "D:/public/ggit/tests/1");
+    // ggit_graph_load(&graph, "D:/public/ggit/tests/2");
+    // ggit_graph_load(&graph, "D:/public/ggit/tests/3");
     // ggit_graph_load(&graph, "D:/public/ggit/tests/tag-with-multiple-matches");
-    // ggit_graph_load(&graph, "C:/Projects/ColumboMonorepo");
+    ggit_graph_load(&graph, "C:/Projects/ColumboMonorepo");
 
     bool running = true;
     while (running) {
