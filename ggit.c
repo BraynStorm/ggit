@@ -570,6 +570,25 @@ ggit_ui_draw_graph(
             color
         );
     }
+    // Draw the branch names.
+    int const n_refs = graph->ref_names.size;
+    for (int i = 0; i < n_refs; ++i) {
+        int const commit_i = ggit_vector_get_int(&graph->ref_commits, i);
+
+        int ci = g_height - 1 - commit_i;
+        if (ci > i_max)
+            continue;
+
+        char const* name = ggit_vector_get_string(&graph->ref_names, i);
+
+        int const commit_y = graph_y
+                             + ggit_graph_commit_screen_y_top(
+                                 g_width,
+                                 g_height,
+                                 commit_i
+                             );
+        util_draw_text(renderer, font_monospaced, name, 0, commit_y, 0, 0);
+    }
 }
 
 static void
