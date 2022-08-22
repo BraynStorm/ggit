@@ -313,6 +313,8 @@ struct ggit_commit_tag
 ggit_branch_to_tag(char const* ref_name, struct ggit_vector* special_branches)
 {
     struct ggit_commit_tag tag = { { -1, -1 }, true };
+    if (strcmp(ref_name, "HEAD") == 0)
+        goto end;
     for (int i = 0; i < special_branches->size; ++i) {
         struct ggit_special_branch* sb = ggit_vector_ref_special_branch(
             special_branches,
@@ -339,6 +341,7 @@ ggit_branch_to_tag(char const* ref_name, struct ggit_vector* special_branches)
             break;
         }
     }
+end:
     if (tag.tag[0] == -1)
         fprintf(stderr, "Ignoring ref %s - no matching special branches.\n", ref_name);
     return tag;
@@ -412,6 +415,9 @@ ggit_label_merge_commits(
             commit_tags,
             my_parents[1]
         );
+
+        if (tag_main.tag[0] == -1)
+            tag_main = *my_tags;
 
         *my_tags = *p0_tags = tag_main;
         *p1_tags = tag_kink;
