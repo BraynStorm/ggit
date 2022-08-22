@@ -108,11 +108,96 @@ ggit_load_refs(
     return 0;
 }
 
+
+static bool
+ggit_parse_merge_commit__bitbucket_0(
+    int message_length,
+    char const* merge_commit_message,
+    char** out_name_main,
+    char** out_name_kink
+)
+{
+    /* Like: Merged in build/update-installer-output-paths (pull request #287) */
+
+    char const start_0[] = "Merged in ";
+    int start_0_strlen = sizeof(start_0) - 1;
+    if (!starts_with(merge_commit_message, start_0))
+        /* Not a bitbucket merge */
+        return false;
+
+    int next_space = index_of(
+        message_length - start_0_strlen,
+        merge_commit_message + start_0_strlen,
+        ' '
+    );
+    int open_paren = index_of(
+        message_length - start_0_strlen,
+        merge_commit_message + start_0_strlen,
+        '('
+    );
+
+    int end = (min(open_paren, next_space)) - 1;
+
+    if (next_space <= 0 && open_paren <= 0)
+        return false;
+
+    *out_name_main = 0;
+    *out_name_kink = strndup(next_space, merge_commit_message + start_0_strlen);
+    return true;
+}
+static bool
+ggit_parse_merge_commit__bitbucket_1(
+    int message_length,
+    char const* merge_commit_message,
+    char** out_name_main,
+    char** out_name_kink
+)
+{
+    /* Like: Merged A into B (pull request #287) */
+
+    char const start_0[] = "Merged ";
+    int start_0_strlen = sizeof(start_0) - 1;
+    if (!starts_with(merge_commit_message, start_0))
+        /* Not a bitbucket merge */
+        return false;
+
+    int next_space = index_of(
+        message_length - start_0_strlen,
+        merge_commit_message + start_0_strlen,
+        ' '
+    );
+
+    if (next_space <= 0)
+        return false;
+
+    char const* kink_name = merge_commit_message + start_0_strlen;
+    int kink_strlen = next_space;
+
+    if (0 != memcmp(kink_name + kink_strlen, " into ", 6))
+        return false;
+
+    char const* main_name = kink_name + kink_strlen + 6;
+    int main_strlen = message_length - start_0_strlen - 6 - kink_strlen;
+    next_space = index_of(main_strlen, main_name, ' ');
+    if (next_space > 0) {
+        main_strlen = next_space;
+    } else {
+        int open_paren = index_of(main_strlen, main_name, '(');
+        if (open_paren > 0) {
+            main_strlen = open_paren;
+        }
+    }
+
+    *out_name_main = strndup(main_strlen, main_name);
+    *out_name_kink = strndup(kink_strlen, kink_name);
+    return true;
+}
+
 /* TODO:
     clean up the internals
 */
 static bool
-ggit_parse_merge_commit(
+ggit_parse_merge_commit__git(
     int message_length,
     char const* merge_commit_message,
     char** out_name_main,
@@ -134,21 +219,20 @@ ggit_parse_merge_commit(
         merge_commit_message + start_0_strlen,
         '\''
     );
-    if (closing_quote) {
+    if (closing_quote > 0) {
         int kink_len = closing_quote;
         char* kink_name = strndup(kink_len, merge_commit_message + start_0_strlen);
         if (closing_quote + start_0_strlen + 1 != message_length) {
             // into 'branch_main'
             char const* leftover_message = merge_commit_message + start_0_strlen
                                            + closing_quote + 1;
+            char const* main_name;
             if (starts_with(leftover_message, " into ")) {
-                char const* main_name = leftover_message + 6;
-                int main_len = (int)strlen(main_name);
-                /* TODO(boz): Change to strdup. */
-                *out_name_main = strndup(main_len, main_name);
+                main_name = leftover_message + 6;
             } else {
-                *out_name_main = _strdup("master");
+                main_name = "master";
             }
+            *out_name_main = _strdup(main_name);
         } else {
             *out_name_main = _strdup("master");
         }
@@ -157,6 +241,34 @@ ggit_parse_merge_commit(
         return false;
     }
     return true;
+}
+static bool
+ggit_parse_merge_commit(
+    int message_length,
+    char const* merge_commit_message,
+    char** out_name_main,
+    char** out_name_kink
+)
+{
+    return ggit_parse_merge_commit__git(
+               message_length,
+               merge_commit_message,
+               out_name_main,
+               out_name_kink
+           )
+           || ggit_parse_merge_commit__bitbucket_0(
+               message_length,
+               merge_commit_message,
+               out_name_main,
+               out_name_kink
+           )
+           || ggit_parse_merge_commit__bitbucket_1(
+               message_length,
+               merge_commit_message,
+               out_name_main,
+               out_name_kink
+           )
+           || 0;
 }
 
 static int
