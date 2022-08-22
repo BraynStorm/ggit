@@ -42,24 +42,12 @@ struct ggit_input
     bool buttons[5];
 };
 
-struct Hash
+struct compressed_x
 {
-    unsigned char sha[40];
+    short new_x;
+    bool taken;
 };
-typedef struct Hash Parents[2];
-typedef struct Hash Ref;
-
-GGIT_GENERATE_VECTOR_GETTERS(struct Hash, hash);
-GGIT_GENERATE_VECTOR_GETTERS(Ref, ref);
-GGIT_GENERATE_VECTOR_REF_GETTER(Parents, parents);
-
-void
-random_hash(struct Hash* out)
-{
-    for (int i = 0; i < 40; ++i)
-        out->sha[i] = rand();
-}
-
+GGIT_GENERATE_VECTOR_GETTERS(struct compressed_x, compressed_x)
 
 /* TODO:
     Use this instead of _popen in ggit_graph_load();
@@ -293,9 +281,12 @@ set_color(SDL_Renderer* renderer, SDL_Color color)
 {
     SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
 }
-
 static inline int
-ggit_graph_commit_screen_x_left(struct ggit_graph* graph, int commit_index)
+ggit_graph_commit_screen_column(
+    struct ggit_graph* graph,
+    struct ggit_vector* x_map,
+    int commit_index
+)
 {
     struct ggit_commit_tag const tag = graph->tags[commit_index];
     int const branch = tag.tag[0];
@@ -336,15 +327,37 @@ ggit_graph_commit_screen_x_left(struct ggit_graph* graph, int commit_index)
         }
     column += index;
 
+    if (x_map && x_map->size > column) {
+        column = ggit_vector_ref_compressed_x(x_map, column)->new_x;
+    }
+
+    return column;
+}
+static inline int
+ggit_graph_commit_screen_x_left(
+    struct ggit_graph* graph,
+    struct ggit_vector* x_map,
+    int commit_index
+)
+{
+    int const column = ggit_graph_commit_screen_column(graph, x_map, commit_index);
     int const commit_x_left = column * ITEM_BOX_W;
 
     return commit_x_left;
 }
 
 static inline int
-ggit_graph_commit_screen_x_center(struct ggit_graph* graph, int commit_index)
+ggit_graph_commit_screen_x_center(
+    struct ggit_graph* graph,
+    struct ggit_vector* x_map,
+    int commit_index
+)
 {
-    int const commit_x_left = ggit_graph_commit_screen_x_left(graph, commit_index);
+    int const commit_x_left = ggit_graph_commit_screen_x_left(
+        graph,
+        x_map,
+        commit_index
+    );
     int const commit_x_center = (ITEM_BOX_W / 2) + commit_x_left;
     return commit_x_center;
 }
@@ -373,6 +386,7 @@ struct ggit_ui
     int graph_y;
 };
 
+
 static void
 ggit_ui_draw_graph(
     struct ggit_ui* ui,
@@ -381,17 +395,52 @@ ggit_ui_draw_graph(
     TTF_Font* font_monospaced
 )
 {
+    int const i_max = 150;
     int const g_width = graph->width;
     int const g_height = graph->height;
 
     int const graph_x = ui->graph_x;
     int const graph_y = ui->graph_y;
 
-    int const text_x = graph_x + (graph->width + 2) * ITEM_OUTER_W + 16;
+    static int compressed_width = 0;
+    // Compress X
+    static struct ggit_vector compressed_x = { 0 };
+    if (compressed_x.size != g_width) {
+        if (compressed_x.data)
+            ggit_vector_destroy(&compressed_x);
+
+        ggit_vector_init(&compressed_x, sizeof(struct compressed_x));
+
+        ggit_vector_reserve(&compressed_x, g_width);
+        memset(compressed_x.data, 0, compressed_x.capacity * compressed_x.value_size);
+        compressed_x.size = g_width;
+        for (int i = 0; i < g_height; ++i) {
+            if (i > i_max)
+                break;
+
+            int const commit_i = g_height - 1 - i;
+            int x = ggit_graph_commit_screen_column(graph, 0, commit_i);
+
+            ggit_vector_ref_compressed_x(&compressed_x, x)->taken = true;
+        }
+
+        int counter = 0;
+        for (int i = 0; i < g_width; ++i) {
+            struct compressed_x* cx = ggit_vector_ref_compressed_x(&compressed_x, i);
+            if (cx->taken) {
+                cx->new_x = counter++;
+            }
+        }
+        compressed_width = counter;
+    }
+
+    int const text_x = graph_x + compressed_width * ITEM_BOX_W + 16;
 
     // Draw the text to the right.
-    for (int i = 0; i < graph->height; ++i) {
-        int const commit_i = graph->height - 1 - i;
+    for (int i = 0; i < g_height; ++i) {
+        if (i > i_max)
+            break;
+        int const commit_i = g_height - 1 - i;
         int const commit_y = graph_y
                              + ggit_graph_commit_screen_y_top(
                                  graph->width,
@@ -404,10 +453,17 @@ ggit_ui_draw_graph(
 
     // Draw lines between the commits.
     set_color(renderer, (SDL_Color){ 0xAA, 0xAA, 0xAA, 0xFF });
-    for (int i = 0; i < graph->height; ++i) {
-        int const commit_i = graph->height - 1 - i;
+    for (int i = 0; i < g_height; ++i) {
+        if (i > i_max)
+            break;
+        int const commit_i = g_height - 1 - i;
 
-        int const commit_x = graph_x + ggit_graph_commit_screen_x_left(graph, commit_i);
+        int const commit_x = graph_x
+                             + ggit_graph_commit_screen_x_left(
+                                 graph,
+                                 &compressed_x,
+                                 commit_i
+                             );
         int const commit_y = graph_y
                              + ggit_graph_commit_screen_y_center(
                                  g_width,
@@ -417,6 +473,7 @@ ggit_ui_draw_graph(
         int const commit_center_x = graph_x
                                     + ggit_graph_commit_screen_x_center(
                                         graph,
+                                        &compressed_x,
                                         commit_i
                                     );
         int const commit_y_bottom = commit_y + ITEM_H / 2 + BORDER + MARGIN_Y;
@@ -430,6 +487,7 @@ ggit_ui_draw_graph(
             int const parent_center_x = graph_x
                                         + ggit_graph_commit_screen_x_center(
                                             graph,
+                                            &compressed_x,
                                             parent
                                         );
             int const parent_y_top = graph_y
@@ -478,12 +536,18 @@ ggit_ui_draw_graph(
 
     // Draw the blocks.
     for (int i = 0; i < g_height; ++i) {
+        if (i > i_max)
+            break;
         int const commit_i = g_height - 1 - i;
         int const tag = graph->tags[commit_i].tag[0];
         int const column = tag;
 
         int const commit_x = MARGIN_X + graph_x
-                             + ggit_graph_commit_screen_x_left(graph, commit_i);
+                             + ggit_graph_commit_screen_x_left(
+                                 graph,
+                                 &compressed_x,
+                                 commit_i
+                             );
         int const commit_y = MARGIN_Y + graph_y
                              + ggit_graph_commit_screen_y_top(
                                  g_width,
