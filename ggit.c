@@ -548,7 +548,7 @@ ggit_ui_draw_graph(
                              );
         bool is_merge = graph->parents[commit_i].parent[1] != -1;
 
-        int const cut = 3 + 2 * is_merge;
+        int const cut = 2 + 2 * is_merge;
 
         int color_index = min(ARRAY_COUNT(GGIT_COLORS) - 1, tag);
         SDL_Color color = GGIT_COLORS[color_index];
