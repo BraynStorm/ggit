@@ -1,33 +1,3 @@
-/*
-Tasks
-========
-
-- Replace SDL with GDI.
-- Split platform layer.
-
-
-TODO
-========
-
-- Draw branches on-hover of columns.
-- Draw the HEAD commit in a distinctive way.
-- Draw the refs/stash commits in a distinctive way.
-- Make columns start-end-y dependant and compress the graph horizontally when a
-  column is not used.
-- Add zoom in/out.
-- Add configurable branches/colors/order.
-- Add custom filtering (by author, by date, range of commits, etc...).
-- Add clickable GUI
-    - Add "Checkout" - double-click on a head-of-branch commit.
-    - Add "Create branch" - ???
-    - Add "Delete branch"
-    - Add "Rebase"   - drag-and-drop a commit.
-        - Holding CTRL does a cherry-pick instead.
-    - Add "Merge"    - right-click-and-drag from the 'kink' to the 'main'.
-- Add auto-reloading.
-- Add support for git tags.
-*/
-
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_main.h>
 #include <SDL2/SDL_video.h>
@@ -647,15 +617,17 @@ main(int argc, char** argv)
     struct ggit_graph graph;
     ggit_graph_init(&graph);
     ggit_vector_init(&graph.special_branches, sizeof(struct ggit_special_branch));
+
     // clang-format off
-    ggit_vector_push(&graph.special_branches, &(struct ggit_special_branch){ "master", 0, { [0] = { 0x7E, 0xD3, 0x21 }, [1] = {} } });
-    ggit_vector_push(&graph.special_branches, &(struct ggit_special_branch){ "hotfix/", -1, { [0] = { 0xE6, 0x00, 0x00 }, [1] = {} } });
-    ggit_vector_push(&graph.special_branches, &(struct ggit_special_branch){ "release/", -1, { [0] = { 0x00, 0x68, 0xDE }, [1] = {} } });
-    ggit_vector_push(&graph.special_branches, &(struct ggit_special_branch){ "bugfix/", +1, { [0] = { 0xE6, 0x96, 0x17 }, [1] = {} } });
-    ggit_vector_push(&graph.special_branches, &(struct ggit_special_branch){ "develop/", +1, { [0] = { 0xB8, 0x16, 0xD9 }, [1] = {} } });
-    ggit_vector_push(&graph.special_branches, &(struct ggit_special_branch){ "feature/", +1, { [0] = { 0x34, 0xD3, 0xE5 }, [1] = {} } });
-    ggit_vector_push(&graph.special_branches, &(struct ggit_special_branch){ "", +1, { [0] = { 0xEE, 0xEE, 0xEE }, [1] = {} } });
+    ggit_vector_push(&graph.special_branches, &(struct ggit_special_branch){ "master",           regex_compile("^master$"),           0, { [0] = { 0x7E, 0xD3, 0x21 }, [1] = {} } });
+    ggit_vector_push(&graph.special_branches, &(struct ggit_special_branch){ "hotfix/",          regex_compile("^hotfix/"),          -1, { [0] = { 0xE6, 0x00, 0x00 }, [1] = {} } });
+    ggit_vector_push(&graph.special_branches, &(struct ggit_special_branch){ "release/",         regex_compile("^release/"),         -1, { [0] = { 0x00, 0x68, 0xDE }, [1] = {} } });
+    ggit_vector_push(&graph.special_branches, &(struct ggit_special_branch){ "bugfix/",          regex_compile("^bugfix/"),          +1, { [0] = { 0xE6, 0x96, 0x17 }, [1] = {} } });
+    ggit_vector_push(&graph.special_branches, &(struct ggit_special_branch){ "develop/|sprint/", regex_compile("^(develop|sprint)/"),+1, { [0] = { 0xB8, 0x16, 0xD9 }, [1] = {} } });
+    ggit_vector_push(&graph.special_branches, &(struct ggit_special_branch){ "feature/",         regex_compile("^feature/"),         +1, { [0] = { 0x34, 0xD3, 0xE5 }, [1] = {} } });
+    ggit_vector_push(&graph.special_branches, &(struct ggit_special_branch){ "",                 regex_compile(".*"),                +1, { [0] = { 0xEE, 0xEE, 0xEE }, [1] = {} } });
     // clang-format on
+
     for (int i = 0; i < graph.special_branches.size; ++i) {
         ggit_vector_init(
             &ggit_vector_ref_special_branch(&graph.special_branches, i)->instances,

@@ -7,6 +7,8 @@
 #include <string.h>
 #include <assert.h>
 
+#include <libsmallregex.h>
+
 
 GGIT_GENERATE_VECTOR_REF_GETTER(struct ggit_commit_parents, commit_parents)
 GGIT_GENERATE_VECTOR_REF_GETTER(struct ggit_commit_tag, commit_tags)
@@ -321,7 +323,7 @@ ggit_branch_to_tag(char const* ref_name, struct ggit_vector* special_branches)
             i
         );
 
-        if (starts_with(ref_name, sb->match)) {
+        if (regex_matchp(sb->regex, ref_name) == 0) {
             int n_instances = sb->instances.size;
             tag.tag[0] = i;
             for (int j = 0; j < n_instances; ++j) {
@@ -683,7 +685,8 @@ ggit_graph_destroy(struct ggit_graph* graph)
             &graph->special_branches,
             i
         );
-        free(sb->match);
+        free(sb->name);
+        regex_free(sb->regex);
         ggit_vector_destroy(&sb->instances);
     }
     ggit_vector_destroy(&graph->special_branches);

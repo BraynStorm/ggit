@@ -1,0 +1,22 @@
+## Tasks
+
+- [x] Allow regex matching for special branches.
+- [ ] Draw lines in __style__.
+- [ ] Draw branches on-hover of columns.
+- [ ] Draw the HEAD commit in a distinctive way.
+- [ ] Draw the refs/stash commits in a distinctive way.
+- [ ] Make columns start-end-y dependant and compress the graph horizontally when a column is not used.
+- [ ] Add zoom in/out.
+- [ ] Add configurable branches/colors/order.
+- [ ] Add custom filtering (by author, by date, range of commits, etc...).
+- [ ] Add clickable GUI
+    - [ ] Add "Checkout" - double-click on a head-of-branch commit.
+    - [ ] Add "Create branch" - ???
+    - [ ] Add "Delete branch"
+    - [ ] Add "Rebase"   - drag-and-drop a commit.
+        - [ ] Holding CTRL does a cherry-pick instead.
+            - [ ] Add "Merge"    - right-click-and-drag from the 'kink' to the 'main'.
+- [ ] Add auto-reloading.
+- [ ] Add support for git tags.
+- [ ] Add support for Jenkins.
+- [ ] Add support for JIRA.

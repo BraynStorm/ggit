@@ -1,0 +1,4 @@
+[submodule "deps/small-regex"]
+	path = deps/small-regex
+	url = git@gitlab.com:relkom/small-regex.git
+	branch = master

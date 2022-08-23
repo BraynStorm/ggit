@@ -3,6 +3,8 @@
 #include "ggit-vector.h"
 #include "ggit-ui-settings.h"
 
+#include <libsmallregex.h>
+
 struct ggit_commit_parents
 {
     int parent[2];
@@ -47,8 +49,8 @@ enum ggit_growth_direction
 struct ggit_special_branch
 {
     /* Like: "release/" */
-    char* match;
-    /* TODO: add display name. */
+    char* name;
+    struct small_regex* regex;
 
     /* Valid values:
         -1 = left
