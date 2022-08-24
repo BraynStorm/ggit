@@ -366,7 +366,7 @@ ggit_refname_to_tag(char const* ref_name, struct ggit_vector* special_branches)
             special_branches
         );
     else
-        return (struct ggit_commit_tag){ { -1, -1 } };
+        return (struct ggit_commit_tag){ { -1, -1 }, false };
 }
 
 static int
@@ -401,8 +401,8 @@ ggit_label_merge_commits(
         char* name_kink = 0;
         ggit_parse_merge_commit(msg_len, msg, &name_main, &name_kink);
 
-        struct ggit_commit_tag tag_main = { { -1, -1 }, true };
-        struct ggit_commit_tag tag_kink = { { -1, -1 }, true };
+        struct ggit_commit_tag tag_main = { { -1, -1 }, false };
+        struct ggit_commit_tag tag_kink = { { -1, -1 }, false };
         if (name_main)
             tag_main = ggit_branch_to_tag(name_main, special_branches);
         if (name_kink)
@@ -574,12 +574,7 @@ ggit_graph_load_repository(
                 ggit_vector_push(&commit_message_lengths, &msg_len);
                 ggit_vector_push(&commit_messages, &msg);
                 ggit_vector_push(&commit_hashes, &hash);
-                struct ggit_commit_tag tags = {
-                    {
-                        -1,
-                        -1,
-                    },
-                };
+                struct ggit_commit_tag tags = { { -1, -1 }, false };
                 ggit_vector_push(&commit_tags, &tags);
             }
         }
