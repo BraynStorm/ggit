@@ -619,13 +619,13 @@ main(int argc, char** argv)
     ggit_vector_init(&graph.special_branches, sizeof(struct ggit_special_branch));
 
     // clang-format off
-    ggit_vector_push(&graph.special_branches, &(struct ggit_special_branch){ "master",           regex_compile("^master$"),           0, { [0] = { 0x7E, 0xD3, 0x21 }, [1] = {} } });
-    ggit_vector_push(&graph.special_branches, &(struct ggit_special_branch){ "hotfix/",          regex_compile("^hotfix/"),          -1, { [0] = { 0xE6, 0x00, 0x00 }, [1] = {} } });
-    ggit_vector_push(&graph.special_branches, &(struct ggit_special_branch){ "release/",         regex_compile("^release/"),         -1, { [0] = { 0x00, 0x68, 0xDE }, [1] = {} } });
-    ggit_vector_push(&graph.special_branches, &(struct ggit_special_branch){ "bugfix/",          regex_compile("^bugfix/"),          +1, { [0] = { 0xE6, 0x96, 0x17 }, [1] = {} } });
-    ggit_vector_push(&graph.special_branches, &(struct ggit_special_branch){ "develop/|sprint/", regex_compile("^(develop|sprint)/"),+1, { [0] = { 0xB8, 0x16, 0xD9 }, [1] = {} } });
-    ggit_vector_push(&graph.special_branches, &(struct ggit_special_branch){ "feature/",         regex_compile("^feature/"),         +1, { [0] = { 0x34, 0xD3, 0xE5 }, [1] = {} } });
-    ggit_vector_push(&graph.special_branches, &(struct ggit_special_branch){ "",                 regex_compile(".*"),                +1, { [0] = { 0xEE, 0xEE, 0xEE }, [1] = {} } });
+    ggit_vector_push(&graph.special_branches, &(struct ggit_special_branch){ "master",   regex_compile("^master$"),   0, { [0] = { 0x7E, 0xD3, 0x21 }, [1] = {} } });
+    ggit_vector_push(&graph.special_branches, &(struct ggit_special_branch){ "hotfix/",  regex_compile("^hotfix/"),  -1, { [0] = { 0xE6, 0x00, 0x00 }, [1] = {} } });
+    ggit_vector_push(&graph.special_branches, &(struct ggit_special_branch){ "release/", regex_compile("^release/"), -1, { [0] = { 0x00, 0x68, 0xDE }, [1] = {} } });
+    ggit_vector_push(&graph.special_branches, &(struct ggit_special_branch){ "bugfix/",  regex_compile("^bugfix/"),  +1, { [0] = { 0xE6, 0x96, 0x17 }, [1] = {} } });
+    ggit_vector_push(&graph.special_branches, &(struct ggit_special_branch){ "sprint/",  regex_compile("^sprint/"),  +1, { [0] = { 0xB8, 0x16, 0xD9 }, [1] = {} } });
+    ggit_vector_push(&graph.special_branches, &(struct ggit_special_branch){ "feature/", regex_compile("^feature/"), +1, { [0] = { 0x34, 0xD3, 0xE5 }, [1] = {} } });
+    ggit_vector_push(&graph.special_branches, &(struct ggit_special_branch){ "",         regex_compile(".*"),        +1, { [0] = { 0xEE, 0xEE, 0xEE }, [1] = {} } });
     // clang-format on
 
     for (int i = 0; i < graph.special_branches.size; ++i) {
