@@ -46,6 +46,8 @@ struct ggit_input
     int delta_mouse_x;
     int delta_mouse_y;
     bool buttons[5];
+
+    bool is_ctrl_down;
 };
 
 struct compressed_x
@@ -948,6 +950,9 @@ main(int argc, char** argv)
     ui.border = 1;
     ui.margin_x = 4;
     ui.margin_y = 4;
+    struct ggit_ui original_ui = ui;
+
+    float scale = 1.0f;
 
 
     struct ggit_graph graph;
@@ -985,6 +990,7 @@ main(int argc, char** argv)
     while (running) {
         input.delta_mouse_x = 0;
         input.delta_mouse_y = 0;
+        int a;
 
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
@@ -1011,7 +1017,25 @@ main(int argc, char** argv)
                 case SDL_MOUSEBUTTONUP:
                     input.buttons[event.button.button - 1] = false;
                     break;
+                case SDL_MOUSEWHEEL:
+                    if (input.is_ctrl_down) {
+                        scale += 0.1f * (-1.0f + 2.0f * (event.wheel.y > 0));
+
+                        ui.item_w = original_ui.item_w * scale;
+                        ui.item_h = original_ui.item_h * scale;
+                        ui.border = original_ui.border;
+                        ui.margin_x = original_ui.margin_x;
+                        ui.margin_y = original_ui.margin_y;
+                    } else {
+                        int delta = -1 + 2 * (event.wheel.y > 0);
+                        ui.graph_y += delta * (ui.item_h + ui.border * 2 + ui.margin_y * 2);
+                    }
+
+                    break;
                 case SDL_KEYDOWN:
+                    if (event.key.keysym.scancode == SDL_SCANCODE_LCTRL) {
+                        input.is_ctrl_down = true;
+                    }
                     if (event.key.keysym.scancode == SDL_SCANCODE_F5) {
                         ggit_graph_load(&graph, "D:/public/ggit/tests/3");
                     }
