@@ -21,20 +21,3 @@ static SDL_Color const GGIT_COLORS[] = {
 static SDL_Color const GGIT_COLOR_VLINE = { 0x9B, 0x9B, 0x9B, 0xFF };
 static SDL_Color const GGIT_COLOR_HLINE = { 0xDA, 0xDA, 0xDA, 0xFF };
 static SDL_Color const GGIT_COLOR_BORDER = { 0xE3, 0xE3, 0xE3, 0xFF };
-
-#define SMALL
-#ifdef SMALL
-static int const ITEM_W = 18;
-static int const ITEM_H = 12;
-#else
-static int const ITEM_W = 38;
-static int const ITEM_H = 26;
-#endif
-static int const BORDER = 1;
-static int const MARGIN_X = 2;
-static int const MARGIN_Y = 4;
-
-static int const ITEM_OUTER_W = ITEM_W + BORDER * 2;
-static int const ITEM_OUTER_H = ITEM_H + BORDER * 2;
-static int const ITEM_BOX_W = ITEM_OUTER_W + MARGIN_X * 2;
-static int const ITEM_BOX_H = ITEM_OUTER_H + MARGIN_Y * 2;
