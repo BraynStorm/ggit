@@ -659,11 +659,9 @@ ggit_graph_clear(struct ggit_graph* graph)
     graph->height = 0;
 
     for (int i = 0; i < graph->special_branches.size; ++i) {
-        struct ggit_special_branch* sb = ggit_vector_ref_special_branch(
-            &graph->special_branches,
-            i
+        ggit_special_branch_clear(
+            ggit_vector_ref_special_branch(&graph->special_branches, i)
         );
-        ggit_vector_clear_and_free(&sb->instances);
     }
 
     ggit_vector_clear_and_free(&graph->ref_names);
@@ -676,13 +674,9 @@ ggit_graph_destroy(struct ggit_graph* graph)
     ggit_graph_clear(graph);
 
     for (int i = 0; i < graph->special_branches.size; ++i) {
-        struct ggit_special_branch* sb = ggit_vector_ref_special_branch(
-            &graph->special_branches,
-            i
+        ggit_special_branch_destroy(
+            ggit_vector_ref_special_branch(&graph->special_branches, i)
         );
-        free(sb->name);
-        regex_free(sb->regex);
-        ggit_vector_destroy(&sb->instances);
     }
     ggit_vector_destroy(&graph->special_branches);
 
@@ -733,4 +727,19 @@ ggit_graph_load(struct ggit_graph* graph, char const* path_repository)
     free(gitlog);
 
     return 0;
+}
+
+void
+ggit_special_branch_clear(struct ggit_special_branch* sb)
+{
+    ggit_vector_clear_and_free(&sb->instances);
+    ggit_vector_clear(&sb->spans);
+}
+void
+ggit_special_branch_destroy(struct ggit_special_branch* sb)
+{
+    free(sb->name);
+    regex_free(sb->regex);
+    ggit_vector_destroy(&sb->instances);
+    ggit_vector_destroy(&sb->spans);
 }
