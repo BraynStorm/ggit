@@ -46,6 +46,14 @@ enum ggit_growth_direction
     ggit_growth_direction_right = 1,
 };
 
+struct ggit_column_span
+{
+    int merge_min;
+    int commit_min;
+    int commit_max;
+    int merge_max;
+};
+
 struct ggit_special_branch
 {
     /* Like: "release/" */
@@ -61,8 +69,8 @@ struct ggit_special_branch
     /* Two colors, three bytes each (RGB). */
     uint8_t colors_base[2][3];
 
-    /* vector of char* */
-    struct ggit_vector instances;
+    /* [char*]                   */ struct ggit_vector instances;
+    /* [struct ggit_column_span] */ struct ggit_vector spans;
 };
 
 struct ggit_graph
@@ -93,3 +101,4 @@ void ggit_special_branch_clear(struct ggit_special_branch*);
 void ggit_special_branch_destroy(struct ggit_special_branch*);
 
 GGIT_GENERATE_VECTOR_REF_GETTER(struct ggit_special_branch, special_branch)
+GGIT_GENERATE_VECTOR_REF_GETTER(struct ggit_column_span, column_span)

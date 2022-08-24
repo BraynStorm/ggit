@@ -283,6 +283,7 @@ ggit_match_refs_to_commits(
     int count_refs = ref_hashes->size;
     int count_commits = commit_hashes->size;
     for (int r = 0; r < count_refs; ++r) {
+        bool found = false;
         char* ref_hash = ggit_vector_get(ref_hashes, r);
 
         for (int c = 0; c < count_commits; ++c) {
@@ -291,8 +292,13 @@ ggit_match_refs_to_commits(
 
             if (0 == strncmp(commit_hash, ref_hash, commit_hash_len)) {
                 ggit_vector_push(out_ref_commits, &c);
+                found = true;
                 break;
             }
+        }
+        if (!found) {
+            int commit = -1;
+            ggit_vector_push(out_ref_commits, &commit);
         }
     }
 
@@ -353,6 +359,8 @@ static struct ggit_commit_tag
 ggit_refname_to_tag(char const* ref_name, struct ggit_vector* special_branches)
 {
     char const prefix_local_branch[] = "refs/heads/";
+    char const prefix_stash[] = "refs/stash";
+    char const prefix_tags[] = "refs/tags/";
     char const prefix_remote_branch[] = "refs/remotes/origin/";
     /* TODO: support git tags and other things. */
     if (starts_with(ref_name, prefix_local_branch))
@@ -365,8 +373,14 @@ ggit_refname_to_tag(char const* ref_name, struct ggit_vector* special_branches)
             ref_name + sizeof(prefix_remote_branch) - 1,
             special_branches
         );
-    else
-        return (struct ggit_commit_tag){ { -1, -1 }, false };
+    else if (starts_with(ref_name, prefix_stash))
+        return ggit_branch_to_tag(
+            ref_name + sizeof(prefix_stash) - 1,
+            special_branches
+        );
+    else if (starts_with(ref_name, prefix_tags))
+        return ggit_branch_to_tag(ref_name + sizeof(prefix_tags) - 1, special_branches);
+    return (struct ggit_commit_tag){ { -1, -1 }, false };
 }
 
 static int
@@ -470,6 +484,88 @@ ggit_propagate_tags(
         }
     }
 }
+
+static void
+expand_span_merges(struct ggit_column_span* span, int i)
+{
+    span->merge_max = max(span->merge_max, i);
+    span->merge_min = min(span->merge_min, i);
+}
+static void
+expand_span_commits(struct ggit_column_span* span, int i)
+{
+    span->commit_max = max(span->commit_max, i);
+    span->commit_min = min(span->commit_min, i);
+    expand_span_merges(span, i);
+}
+void
+ggit_compute_column_spans(struct ggit_graph* graph)
+{
+    for (int i = 0; i < graph->special_branches.size; ++i) {
+        struct ggit_special_branch* sb = ggit_vector_ref_special_branch(
+            &graph->special_branches,
+            i
+        );
+        ggit_vector_reserve(&sb->spans, sb->instances.size);
+        sb->spans.size = sb->instances.size;
+        for (int j = 0; j < sb->instances.size; ++j) {
+            struct ggit_column_span span = {
+                .merge_min = INT32_MAX,
+                .commit_min = INT32_MAX,
+                .commit_max = INT32_MIN,
+                .merge_max = INT32_MIN,
+            };
+            // "PUSH"
+            *ggit_vector_ref_column_span(&sb->spans, j) = span;
+        }
+    }
+
+    for (int i = 0; i < graph->height; ++i) {
+        struct ggit_commit_tag tag = graph->tags[i];
+        struct ggit_commit_parents parents = graph->parents[i];
+
+        /* TODO: use these as well. */
+        if (tag.tag[0] == -1) {
+            char* hash = graph->hashes[i];
+            char* message = graph->messages[i];
+            int n_message = graph->message_lengths[i];
+            continue;
+        }
+
+        struct ggit_special_branch* sb = ggit_vector_ref_special_branch(
+            &graph->special_branches,
+            tag.tag[0]
+        );
+        struct ggit_column_span* span = ggit_vector_ref_column_span(
+            &sb->spans,
+            tag.tag[1]
+        );
+        expand_span_commits(span, i);
+
+        for (int j = 0; j < 2; ++j) {
+            int const parent = parents.parent[j];
+
+            if (parent != -1) {
+                expand_span_merges(span, parent);
+
+                struct ggit_commit_tag p_tag = graph->tags[parent];
+
+                if (p_tag.tag[0] != -1) {
+                    struct ggit_special_branch* p_sb = ggit_vector_ref_special_branch(
+                        &graph->special_branches,
+                        p_tag.tag[0]
+                    );
+                    struct ggit_column_span* p_span = ggit_vector_ref_column_span(
+                        &p_sb->spans,
+                        p_tag.tag[1]
+                    );
+                    expand_span_merges(p_span, i);
+                }
+            }
+        }
+    }
+}
+
 
 #define GGIT_VECTOR_DEFINE(name, type, initial_size) \
     struct ggit_vector name;                         \
@@ -589,6 +685,8 @@ ggit_graph_load_repository(
     for (int i = 0; i < out_graph->ref_commits.size; ++i) {
         char* ref_name = ggit_vector_get_string(&out_graph->ref_names, i);
         int index = ggit_vector_get_i32(&out_graph->ref_commits, i);
+        if (index == -1)
+            continue;
         struct ggit_commit_tag* tags = ggit_vector_ref_commit_tags(&commit_tags, index);
 
         struct ggit_commit_tag ref_tag = ggit_refname_to_tag(
@@ -624,6 +722,8 @@ ggit_graph_load_repository(
     out_graph->messages = (char**)commit_messages.data;
     out_graph->tags = (struct ggit_commit_tag*)commit_tags.data;
     out_graph->height = commit_messages.size;
+
+    ggit_compute_column_spans(out_graph);
     return 0;
 }
 
