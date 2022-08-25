@@ -351,10 +351,13 @@ ggit_graph_spans_collide(
 {
     int am_min = a->merge_min;
     int am_max = a->merge_max;
-    int bm_min = b->merge_min - 1;
-    int bm_max = b->merge_max + 1;
+    int bm_min = b->merge_min;
+    int bm_max = b->merge_max;
 
-    if ((am_min | am_max | bm_min | bm_max) & ~0x7fffffffu)
+    if (bm_min == -1 && bm_max == -1)
+        return false;
+
+    if ((am_min | am_max | bm_min | bm_max) < 0)
         return true;
 
     if (am_min > am_max) {
@@ -364,10 +367,28 @@ ggit_graph_spans_collide(
         return true;
     }
 
-    return (am_max >= bm_min && am_max <= bm_max)
-           || (am_min >= bm_min && am_min <= bm_max);
+    if (am_max < bm_max)
+        return ggit_graph_spans_collide(b, a);
+
+    /*
+        From this point on
+        A always reaches "higher" than B.
+    */
+
+    return am_min < bm_max;
 }
 
+static void
+join_spans(
+    struct ggit_column_span* restrict inout,
+    struct ggit_column_span const* restrict in
+)
+{
+    inout->commit_min = min(inout->commit_min, in->commit_min);
+    inout->commit_max = max(inout->commit_max, in->commit_max);
+    inout->merge_min = min(inout->merge_min, in->merge_min);
+    inout->merge_max = max(inout->merge_max, in->merge_max);
+}
 static int
 ggit_graph_commit_screen_column(
     struct ggit_graph* graph,
@@ -417,31 +438,48 @@ ggit_graph_commit_screen_column(
                 column += i_branch->instances.size;
         }
     if (commit_branch->growth_direction >= 0) {
-        for (int j = 0; j < index; ++j) {
-            struct ggit_column_span const* j_span = ggit_vector_ref_column_span(
-                &commit_branch->spans,
-                j
-            );
-            if (!ggit_graph_spans_collide(j_span, commit_branch_span)) {
-                // Try compress the column.
+        static struct ggit_vector spans;
+        if (!spans.value_size) {
+            ggit_vector_init(&spans, sizeof(struct ggit_column_span));
+            ggit_vector_reserve(&spans, 128);
+        } else {
+            ggit_vector_clear(&spans);
+        }
 
-                for (int k = j + 1; k < index; ++k) {
-                    struct ggit_column_span const* k_span = ggit_vector_ref_column_span(
-                        &commit_branch->spans,
-                        k
-                    );
-                    if (ggit_graph_spans_collide(j_span, k_span)) {
-                        j = k + 1; // Skip forward.
-                        goto skip;
-                    }
+        // Copy all spans to the temporary spans vector.
+        ggit_vector_reserve(&spans, commit_branch->spans.size);
+        memcpy(
+            spans.data,
+            commit_branch->spans.data,
+            commit_branch->spans.size * commit_branch->spans.value_size
+        );
+
+        /*
+        TODO:
+            Compute all column compressions - their spans in the temporary vector .
+        */
+        bool found = false;
+        for (int i = 0; i < index; ++i) {
+            struct ggit_column_span* i_span = ggit_vector_ref_column_span(&spans, i);
+            for (int j = i + 1; j < index; ++j) {
+                struct ggit_column_span* j_span = ggit_vector_ref_column_span(
+                    &spans,
+                    j
+                );
+                if (!ggit_graph_spans_collide(i_span, j_span)) {
+                    join_spans(i_span, j_span);
+                    j_span->commit_max = -1;
+                    j_span->commit_min = -1;
+                    j_span->merge_max = -1;
+                    j_span->merge_min = -1;
                 }
+            }
 
-                index = j;
-            skip:
-                continue;
+            if (!ggit_graph_spans_collide(i_span, commit_branch_span)) {
+                index = i;
+                break;
             }
         }
-    } else {
     }
     column += index;
 
@@ -545,11 +583,25 @@ ggit_ui_draw_graph__connections(
             commit_i,
             G_HEIGHT
         );
-        int const commit_center_source = ggit_graph_commit_screen_x_center(ui, column);
+        int const commit_x_center_source = ggit_graph_commit_screen_x_center(
+            ui,
+            column
+        );
+        int const commit_y_center_source = ggit_graph_commit_screen_y_center(
+            ui,
+            commit_i,
+            G_HEIGHT
+        );
 
         int const commit_x = graph_x + commit_x_source;
         int const commit_y = graph_y + commit_y_source;
-        int const commit_x_center = graph_x + commit_center_source;
+        int const commit_x_center = graph_x + commit_x_center_source;
+        int const commit_y_center = graph_y
+                                    + ggit_graph_commit_screen_y_center(
+                                        ui,
+                                        commit_i,
+                                        G_HEIGHT
+                                    );
         int const commit_y_bottom = commit_y + ITEM_H / 2 + BORDER + MARGIN_Y;
 
         bool is_merge = graph->parents[commit_i].parent[1] != -1;
@@ -573,46 +625,85 @@ ggit_ui_draw_graph__connections(
                                          parent,
                                          G_HEIGHT
                                      );
-
+            int const parent_y_center_source = ggit_graph_commit_screen_y_center(
+                ui,
+                parent,
+                G_HEIGHT
+            );
+            int const parent_y_center = graph_y + parent_y_center_source;
 
             if (parent_x_center != commit_x_center) {
                 int arc_radius = 5;
                 int direction = 1 + (-2) * (parent_x_center > commit_x_center);
-                draw_arc(
-                    renderer,
-                    commit_x_center - arc_radius * direction,
-                    parent_y_top - arc_radius,
-                    arc_radius,
-                    direction,
-                    1.0f,
-                    (SDL_Color){ 0xAA, 0xAA, 0xAA, 0xFF }
-                );
-                draw_arc(
-                    renderer,
-                    parent_x_center + arc_radius * direction,
-                    parent_y_top + arc_radius,
-                    arc_radius,
-                    -direction,
-                    -1.0f,
-                    (SDL_Color){ 0xAA, 0xAA, 0xAA, 0xFF }
-                );
+                if (j) {
+                    // This is the "secondary" parent - the merged-in branch.
+                    assert(j == 1);
 
-                // Middle - left/right to match parent column
-                SDL_RenderDrawLine(
-                    renderer,
-                    commit_x_center - arc_radius * direction,
-                    parent_y_top,
-                    parent_x_center + arc_radius * direction,
-                    parent_y_top
-                );
-                // Middle - down to match parent top
-                SDL_RenderDrawLine(
-                    renderer,
-                    commit_x_center,
-                    commit_y,
-                    commit_x_center,
-                    parent_y_top - arc_radius
-                );
+                    draw_arc(
+                        renderer,
+                        parent_x_center + arc_radius * direction,
+                        commit_y_center + arc_radius,
+                        arc_radius,
+                        -direction,
+                        -1.0f,
+                        (SDL_Color){ 0xAA, 0xAA, 0xAA, 0xFF }
+                    );
+
+                    // Middle - left/right to match parent column
+                    SDL_RenderDrawLine(
+                        renderer,
+                        commit_x_center,
+                        commit_y_center,
+                        parent_x_center + arc_radius * direction,
+                        commit_y_center
+                    );
+
+                    // Middle - down to match parent top
+                    SDL_RenderDrawLine(
+                        renderer,
+                        parent_x_center,
+                        commit_y + arc_radius,
+                        parent_x_center,
+                        parent_y_center
+                    );
+                } else {
+                    // Primary parent (the master-er branch)
+                    draw_arc(
+                        renderer,
+                        commit_x_center - arc_radius * direction,
+                        parent_y_top - arc_radius,
+                        arc_radius,
+                        direction,
+                        1.0f,
+                        (SDL_Color){ 0xAA, 0xAA, 0xAA, 0xFF }
+                    );
+                    draw_arc(
+                        renderer,
+                        parent_x_center + arc_radius * direction,
+                        parent_y_top + arc_radius,
+                        arc_radius,
+                        -direction,
+                        -1.0f,
+                        (SDL_Color){ 0xAA, 0xAA, 0xAA, 0xFF }
+                    );
+
+                    // Middle - left/right to match parent column
+                    SDL_RenderDrawLine(
+                        renderer,
+                        commit_x_center - arc_radius * direction,
+                        parent_y_top,
+                        parent_x_center + arc_radius * direction,
+                        parent_y_top
+                    );
+                    // Middle - down to match parent top
+                    SDL_RenderDrawLine(
+                        renderer,
+                        commit_x_center,
+                        commit_y,
+                        commit_x_center,
+                        parent_y_top - arc_radius
+                    );
+                }
             } else {
                 // Commit - center to bottom
                 int const offset_merge = is_merge * -2;
@@ -670,6 +761,8 @@ ggit_ui_draw_graph__spans(
     int const ITEM_OUTER_H = ITEM_H + BORDER * 2;
     int const ITEM_BOX_W = ITEM_OUTER_W + MARGIN_X * 2;
     int const ITEM_BOX_H = ITEM_OUTER_H + MARGIN_Y * 2;
+
+    int n_hovered = 0;
 
     for (int i = i_from; i < i_to; ++i) {
         int const commit_i = G_HEIGHT - 1 - i;
@@ -732,6 +825,7 @@ ggit_ui_draw_graph__spans(
                 input->mouse_x,
                 input->mouse_y
             )) {
+            ++n_hovered;
             draw_rect_cut(
                 renderer,
                 commit_x0,
@@ -742,6 +836,12 @@ ggit_ui_draw_graph__spans(
                 color
             );
         }
+    }
+    if (n_hovered) {
+        printf("#hovered spans = %d\n", n_hovered);
+
+        /* TODO: uncomment this */
+        // assert(n_hovered <= 1);
     }
 }
 

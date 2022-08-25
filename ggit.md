@@ -1,5 +1,6 @@
 ## Tasks
 
+- [ ] TOP PRIORITY move the span-collision code (the static vector stuff) to ggit-vector.c/ggit_load_repository
 - [x] Allow regex matching for special branches.
 - [ ] Draw lines in __style__.
 - [ ] Draw branches on-hover of columns.
@@ -28,3 +29,5 @@
     - [X] ... ??? That makes no sense, yet they are merged.
     - [ ] Found it, we should go down first, to the level of the parent and then go left/right. Right now, the graph lines go left-right first and then go down to the parent.
     - [ ] Spans are overlapping but merged, why?
+- [ ] Feature stemming from another feature extends the span of the parent.
+    - [ ] Probably just have to check if the commit has > 1 parent, and only then extend the parent's span.
