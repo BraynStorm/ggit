@@ -248,47 +248,48 @@ draw_arc(
     int x_center,
     int y_center,
     int r,
-    float direction,
+    float direction_lr,
+    float direction_tb,
     SDL_Color color
 )
 {
     float step = -(M_PI / 2.0f);
     SDL_Point points[] = {
         (SDL_Point){
-            x_center + r * direction * cosf(step * 0.0f * 0.125f),
-            y_center - r * sinf(step * 0.0f * 0.125f),
+            x_center + r * direction_lr * cosf(step * 0.0f * 0.125f),
+            y_center - r * direction_tb * sinf(step * 0.0f * 0.125f),
         },
         (SDL_Point){
-            x_center + r * direction * cosf(step * 1.0f * 0.125f),
-            y_center - r * sinf(step * 1.0f * 0.125f),
+            x_center + r * direction_lr * cosf(step * 1.0f * 0.125f),
+            y_center - r * direction_tb * sinf(step * 1.0f * 0.125f),
         },
         (SDL_Point){
-            x_center + r * direction * cosf(step * 2.0f * 0.125f),
-            y_center - r * sinf(step * 2.0f * 0.125f),
+            x_center + r * direction_lr * cosf(step * 2.0f * 0.125f),
+            y_center - r * direction_tb * sinf(step * 2.0f * 0.125f),
         },
         (SDL_Point){
-            x_center + r * direction * cosf(step * 3.0f * 0.125f),
-            y_center - r * sinf(step * 3.0f * 0.125f),
+            x_center + r * direction_lr * cosf(step * 3.0f * 0.125f),
+            y_center - r * direction_tb * sinf(step * 3.0f * 0.125f),
         },
         (SDL_Point){
-            x_center + r * direction * cosf(step * 4.0f * 0.125f),
-            y_center - r * sinf(step * 4.0f * 0.125f),
+            x_center + r * direction_lr * cosf(step * 4.0f * 0.125f),
+            y_center - r * direction_tb * sinf(step * 4.0f * 0.125f),
         },
         (SDL_Point){
-            x_center + r * direction * cosf(step * 5.0f * 0.125f),
-            y_center - r * sinf(step * 5.0f * 0.125f),
+            x_center + r * direction_lr * cosf(step * 5.0f * 0.125f),
+            y_center - r * direction_tb * sinf(step * 5.0f * 0.125f),
         },
         (SDL_Point){
-            x_center + r * direction * cosf(step * 6.0f * 0.125f),
-            y_center - r * sinf(step * 6.0f * 0.125f),
+            x_center + r * direction_lr * cosf(step * 6.0f * 0.125f),
+            y_center - r * direction_tb * sinf(step * 6.0f * 0.125f),
         },
         (SDL_Point){
-            x_center + r * direction * cosf(step * 7.0f * 0.125f),
-            y_center - r * sinf(step * 7.0f * 0.125f),
+            x_center + r * direction_lr * cosf(step * 7.0f * 0.125f),
+            y_center - r * direction_tb * sinf(step * 7.0f * 0.125f),
         },
         (SDL_Point){
-            x_center + r * direction * cosf(step * 8.0f * 0.125f),
-            y_center - r * sinf(step * 8.0f * 0.125f),
+            x_center + r * direction_lr * cosf(step * 8.0f * 0.125f),
+            y_center - r * direction_tb * sinf(step * 8.0f * 0.125f),
         },
     };
 
@@ -352,8 +353,8 @@ ggit_graph_spans_collide(
     int am_max = a->merge_max;
     int bm_min = b->merge_min;
     int bm_max = b->merge_max;
-    return (am_max >= bm_min && am_max <= bm_max)
-           || (am_min >= bm_min && am_min <= bm_max);
+    return (am_max >= bm_min - 1 && am_max <= bm_max + 1)
+           || (am_min >= bm_min - 1 && am_min <= bm_max + 1);
 }
 
 static int
@@ -570,18 +571,37 @@ ggit_ui_draw_graph__connections(
                 draw_arc(
                     renderer,
                     commit_x_center - arc_radius * direction,
-                    commit_y_bottom - arc_radius,
+                    parent_y_top - arc_radius,
                     arc_radius,
                     direction,
+                    1.0f,
                     (SDL_Color){ 0xAA, 0xAA, 0xAA, 0xFF }
                 );
+                draw_arc(
+                    renderer,
+                    parent_x_center + arc_radius * direction,
+                    parent_y_top + arc_radius,
+                    arc_radius,
+                    -direction,
+                    -1.0f,
+                    (SDL_Color){ 0xAA, 0xAA, 0xAA, 0xFF }
+                );
+
                 // Middle - left/right to match parent column
                 SDL_RenderDrawLine(
                     renderer,
                     commit_x_center - arc_radius * direction,
-                    commit_y_bottom,
-                    parent_x_center,
-                    commit_y_bottom
+                    parent_y_top,
+                    parent_x_center + arc_radius * direction,
+                    parent_y_top
+                );
+                // Middle - down to match parent top
+                SDL_RenderDrawLine(
+                    renderer,
+                    commit_x_center,
+                    commit_y,
+                    commit_x_center,
+                    parent_y_top - arc_radius
                 );
             } else {
                 // Commit - center to bottom
@@ -593,23 +613,23 @@ ggit_ui_draw_graph__connections(
                     commit_x_center,
                     commit_y
                 );
+                // Middle - down to match parent top
+                SDL_RenderDrawLine(
+                    renderer,
+                    commit_x_center,
+                    commit_y_bottom + offset_merge,
+                    commit_x_center,
+                    parent_y_top
+                );
+                // Parent - center to top.
+                SDL_RenderDrawLine(
+                    renderer,
+                    parent_x_center,
+                    parent_y_top,
+                    parent_x_center,
+                    parent_y_top + MARGIN_Y
+                );
             }
-            // Middle - down to match parent Top
-            SDL_RenderDrawLine(
-                renderer,
-                parent_x_center,
-                commit_y_bottom,
-                parent_x_center,
-                parent_y_top
-            );
-            // Parent - center to top.
-            SDL_RenderDrawLine(
-                renderer,
-                parent_x_center,
-                parent_y_top,
-                parent_x_center,
-                parent_y_top + MARGIN_Y
-            );
         }
     }
 }
@@ -702,15 +722,15 @@ ggit_ui_draw_graph__spans(
                 input->mouse_x,
                 input->mouse_y
             )) {
-        draw_rect_cut(
-            renderer,
-            commit_x0,
-            span_y_top,
-            commit_x1,
-            span_y_bottom,
-            ITEM_OUTER_W / 2,
-            color
-        );
+            draw_rect_cut(
+                renderer,
+                commit_x0,
+                span_y_top,
+                commit_x1,
+                span_y_bottom,
+                ITEM_OUTER_W / 2,
+                color
+            );
         }
     }
 }
@@ -752,7 +772,7 @@ ggit_ui_draw_graph__commit_messages(
         util_draw_text(renderer, font, message, text_x, commit_y, 0, 0);
     }
 }
-static void
+static int
 ggit_ui_draw_graph__refs(
     struct ggit_ui* ui,
     struct ggit_graph* graph,
@@ -782,6 +802,7 @@ ggit_ui_draw_graph__refs(
     int const ITEM_BOX_H = ITEM_OUTER_H + MARGIN_Y * 2;
 
     int const n_refs = graph->ref_names.size;
+    int refs_width = 0;
     for (int i = 0; i < n_refs; ++i) {
         int const commit_i = ggit_vector_get_int(&graph->ref_commits, i);
 
@@ -793,8 +814,11 @@ ggit_ui_draw_graph__refs(
 
         int const commit_y = graph_y
                              + ggit_graph_commit_screen_y_top(ui, commit_i, G_HEIGHT);
-        util_draw_text(renderer, font, name, 0, commit_y, 0, 0);
+        int w;
+        util_draw_text(renderer, font, name, 0, commit_y, &w, 0);
+        refs_width = max(refs_width, w);
     }
+    return refs_width;
 }
 static void
 ggit_ui_draw_graph__boxes(
@@ -914,17 +938,11 @@ ggit_ui_draw_graph(
     TTF_Font* font_monospaced
 )
 {
-    int const g_width = graph->width;
-    int const g_height = graph->height;
-
-    int const graph_x = ui->graph_x;
-    int const graph_y = ui->graph_y;
-
-    int const i_max = min(g_height, 150);
+    int const i_max = min(graph->height, 150);
     static int compressed_width = 0;
     // Compress X
     static struct ggit_vector compressed_x = { 0 };
-    if (compressed_x.size != g_width) {
+    if (compressed_x.size != graph->width) {
         compressed_width = ggit_ui_graph__generate_compressed_x(
             graph,
             0,
@@ -932,6 +950,20 @@ ggit_ui_draw_graph(
             &compressed_x
         );
     }
+
+    // Draw the refs.
+    int refs_width = ggit_ui_draw_graph__refs(
+        ui,
+        graph,
+        input,
+        0,
+        i_max,
+        renderer,
+        font_monospaced,
+        compressed_width,
+        &compressed_x
+    );
+    ui->graph_x += refs_width;
 
     // Draw spans (debug)
     ggit_ui_draw_graph__spans(ui, graph, input, 0, i_max, renderer, &compressed_x);
@@ -973,18 +1005,7 @@ ggit_ui_draw_graph(
     // Draw the blocks.
     ggit_ui_draw_graph__boxes(ui, graph, 0, i_max, renderer, &compressed_x);
 
-    // Draw the branch names.
-    ggit_ui_draw_graph__refs(
-        ui,
-        graph,
-        input,
-        0,
-        i_max,
-        renderer,
-        font_monospaced,
-        compressed_width,
-        &compressed_x
-    );
+    ui->graph_x -= refs_width;
 }
 
 static void
@@ -1099,6 +1120,7 @@ main(int argc, char** argv)
                 case SDL_MOUSEWHEEL:
                     if (input.is_ctrl_down) {
                         scale += 0.1f * (-1.0f + 2.0f * (event.wheel.y > 0));
+                        scale = max(scale, 0.1f);
 
                         ui.item_w = original_ui.item_w * scale;
                         ui.item_h = original_ui.item_h * scale;
@@ -1112,6 +1134,11 @@ main(int argc, char** argv)
                     }
 
                     break;
+                case SDL_KEYUP:
+                    if (event.key.keysym.scancode == SDL_SCANCODE_LCTRL) {
+                        input.is_ctrl_down = false;
+                    }
+                    break;
                 case SDL_KEYDOWN:
                     if (event.key.keysym.scancode == SDL_SCANCODE_LCTRL) {
                         input.is_ctrl_down = true;
@@ -1123,8 +1150,6 @@ main(int argc, char** argv)
                         ggit_graph_load(&graph, "D:/Stuff/work/Columbo");
                     }
                     break;
-
-                case SDL_KEYUP: break;
             }
         }
 

@@ -199,7 +199,7 @@ ggit_parse_merge_commit__bitbucket_1(
     clean up the internals
 */
 static bool
-ggit_parse_merge_commit__git(
+ggit_parse_merge_commit__git_local(
     int message_length,
     char const* merge_commit_message,
     char** out_name_main,
@@ -245,6 +245,26 @@ ggit_parse_merge_commit__git(
     return true;
 }
 static bool
+ggit_parse_merge_commit__git_remote(
+    int message_length,
+    char const* merge_commit_message,
+    char** out_name_main,
+    char** out_name_kink
+)
+{
+    /* NOTE(boz):
+        Original regex:
+        "Merge remote-tracking branch 'origin/(.+?)'(?: into (.+))?"
+    */
+    static char const start_0[] = "Merge remote-tracking branch '";
+    int start_0_strlen = sizeof(start_0) - 1;
+    if (!starts_with(merge_commit_message, start_0))
+        return false;
+
+    /* TODO: implement. */
+    return false;
+}
+static bool
 ggit_parse_merge_commit(
     int message_length,
     char const* merge_commit_message,
@@ -252,7 +272,13 @@ ggit_parse_merge_commit(
     char** out_name_kink
 )
 {
-    return ggit_parse_merge_commit__git(
+    return ggit_parse_merge_commit__git_local(
+               message_length,
+               merge_commit_message,
+               out_name_main,
+               out_name_kink
+           )
+           || ggit_parse_merge_commit__git_remote(
                message_length,
                merge_commit_message,
                out_name_main,
