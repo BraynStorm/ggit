@@ -351,10 +351,21 @@ ggit_graph_spans_collide(
 {
     int am_min = a->merge_min;
     int am_max = a->merge_max;
-    int bm_min = b->merge_min;
-    int bm_max = b->merge_max;
-    return (am_max >= bm_min - 1 && am_max <= bm_max + 1)
-           || (am_min >= bm_min - 1 && am_min <= bm_max + 1);
+    int bm_min = b->merge_min - 1;
+    int bm_max = b->merge_max + 1;
+
+    if ((am_min | am_max | bm_min | bm_max) & ~0x7fffffffu)
+        return true;
+
+    if (am_min > am_max) {
+        return true;
+    }
+    if (bm_min > bm_max) {
+        return true;
+    }
+
+    return (am_max >= bm_min && am_max <= bm_max)
+           || (am_min >= bm_min && am_min <= bm_max);
 }
 
 static int
@@ -414,21 +425,20 @@ ggit_graph_commit_screen_column(
             if (!ggit_graph_spans_collide(j_span, commit_branch_span)) {
                 // Try compress the column.
 
-                bool collides_with_other = false;
                 for (int k = j + 1; k < index; ++k) {
                     struct ggit_column_span const* k_span = ggit_vector_ref_column_span(
                         &commit_branch->spans,
                         k
                     );
                     if (ggit_graph_spans_collide(j_span, k_span)) {
-                        collides_with_other = true;
-                        break;
+                        j = k + 1; // Skip forward.
+                        goto skip;
                     }
                 }
-                if (!collides_with_other) {
-                    index = j;
-                    break;
-                }
+
+                index = j;
+            skip:
+                continue;
             }
         }
     } else {
