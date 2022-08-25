@@ -22,8 +22,6 @@
 
 #define ARRAY_COUNT(array) ARRAYSIZE(array)
 
-#include "ggit-ui-settings.h"
-
 struct ggit_ui
 {
     int graph_x;
@@ -489,8 +487,8 @@ ggit_graph_commit_screen_y_center(
 static bool
 point_in_rect(int x0, int y0, int x1, int y1, int mx, int my)
 {
-    assert(x0 >= x1);
-    assert(y0 >= y1);
+    assert(x0 <= x1);
+    assert(y0 <= y1);
 
     return mx >= x0 && mx <= x1 && my >= y0 && my <= y1;
 }
@@ -620,6 +618,7 @@ static void
 ggit_ui_draw_graph__spans(
     struct ggit_ui* ui,
     struct ggit_graph* graph,
+    struct ggit_input* input,
     int i_from,
     int i_to,
     SDL_Renderer* renderer,
@@ -645,16 +644,22 @@ ggit_ui_draw_graph__spans(
     for (int i = i_from; i < i_to; ++i) {
         int const commit_i = G_HEIGHT - 1 - i;
         struct ggit_commit_tag const tags = graph->tags[commit_i];
-        int const color_index = min(ARRAY_COUNT(GGIT_COLORS) - 1, tags.tag[0]);
-        int const branch = tags.tag[0];
+        int const i_branch = tags.tag[0];
         int const index = tags.tag[1];
-        if (branch == -1)
+        if (i_branch == -1)
             continue;
-
-        SDL_Color color = GGIT_COLORS[color_index];
+        struct ggit_special_branch* branch = ggit_vector_ref_special_branch(
+            &graph->special_branches,
+            i_branch
+        );
+        SDL_Color color = {
+            .r = branch->colors_base[0][0],
+            .g = branch->colors_base[0][1],
+            .b = branch->colors_base[0][2],
+        };
         struct ggit_special_branch* commit_branch = ggit_vector_ref_special_branch(
             &graph->special_branches,
-            branch
+            i_branch
         );
         struct ggit_column_span* commit_branch_span = ggit_vector_ref_column_span(
             &commit_branch->spans,
@@ -666,33 +671,47 @@ ggit_ui_draw_graph__spans(
             compressed_x,
             commit_i
         );
-        int const commit_x = MARGIN_X + graph_x
-                             + ggit_graph_commit_screen_x_left(ui, column);
-        int span_y_top = ggit_graph_commit_screen_y_top(
-            ui,
-            commit_branch_span->merge_max,
-            G_HEIGHT
-        );
-        int span_y_bottom = ggit_graph_commit_screen_y_top(
-            ui,
-            commit_branch_span->merge_min,
-            G_HEIGHT
-        );
-
         /* Use the base color but increase the brightness. */
-        color.r = min(255, color.r + 120);
-        color.g = min(255, color.g + 120);
-        color.b = min(255, color.b + 120);
+        color.r = min(255, color.r + 90);
+        color.g = min(255, color.g + 90);
+        color.b = min(255, color.b + 90);
 
+        int const commit_x0 = MARGIN_X + graph_x
+                              + ggit_graph_commit_screen_x_left(ui, column);
+        int span_y_top = BORDER + MARGIN_Y + graph_y
+                         + ggit_graph_commit_screen_y_top(
+                             ui,
+                             commit_branch_span->merge_max,
+                             G_HEIGHT
+                         );
+        int span_y_bottom = ITEM_OUTER_H + graph_y
+                            + ggit_graph_commit_screen_y_top(
+                                ui,
+                                commit_branch_span->merge_min,
+                                G_HEIGHT
+                            );
+
+
+        int const commit_x1 = commit_x0 + ITEM_OUTER_W;
+
+        if (point_in_rect(
+                commit_x0,
+                span_y_top,
+                commit_x1,
+                span_y_bottom,
+                input->mouse_x,
+                input->mouse_y
+            )) {
         draw_rect_cut(
             renderer,
-            commit_x,
-            span_y_top + BORDER + MARGIN_Y + graph_y,
-            commit_x + ITEM_OUTER_W,
-            span_y_bottom + ITEM_OUTER_H + graph_y,
+            commit_x0,
+            span_y_top,
+            commit_x1,
+            span_y_bottom,
             ITEM_OUTER_W / 2,
             color
         );
+        }
     }
 }
 
@@ -731,6 +750,50 @@ ggit_ui_draw_graph__commit_messages(
                              + ggit_graph_commit_screen_y_top(ui, commit_i, G_HEIGHT);
         char const* message = graph->messages[commit_i];
         util_draw_text(renderer, font, message, text_x, commit_y, 0, 0);
+    }
+}
+static void
+ggit_ui_draw_graph__refs(
+    struct ggit_ui* ui,
+    struct ggit_graph* graph,
+    struct ggit_input* input,
+    int i_from,
+    int i_to,
+    SDL_Renderer* renderer,
+    TTF_Font* font,
+    int compressed_width,
+    struct ggit_vector* compressed_x
+)
+{
+    int const graph_x = ui->graph_x;
+    int const graph_y = ui->graph_y;
+    int const G_WIDTH = graph->width;
+    int const G_HEIGHT = graph->height;
+
+    int const ITEM_W = ui->item_w;
+    int const ITEM_H = ui->item_h;
+    int const BORDER = ui->border;
+    int const MARGIN_X = ui->margin_x;
+    int const MARGIN_Y = ui->margin_y;
+
+    int const ITEM_OUTER_W = ITEM_W + BORDER * 2;
+    int const ITEM_OUTER_H = ITEM_H + BORDER * 2;
+    int const ITEM_BOX_W = ITEM_OUTER_W + MARGIN_X * 2;
+    int const ITEM_BOX_H = ITEM_OUTER_H + MARGIN_Y * 2;
+
+    int const n_refs = graph->ref_names.size;
+    for (int i = 0; i < n_refs; ++i) {
+        int const commit_i = ggit_vector_get_int(&graph->ref_commits, i);
+
+        int ci = G_HEIGHT - 1 - commit_i;
+        if (ci < i_from || ci >= i_to)
+            continue;
+
+        char const* name = ggit_vector_get_string(&graph->ref_names, i);
+
+        int const commit_y = graph_y
+                             + ggit_graph_commit_screen_y_top(ui, commit_i, G_HEIGHT);
+        util_draw_text(renderer, font, name, 0, commit_y, 0, 0);
     }
 }
 static void
@@ -775,8 +838,26 @@ ggit_ui_draw_graph__boxes(
 
         int const cut = 2 + 2 * is_merge;
 
-        int color_index = min(ARRAY_COUNT(GGIT_COLORS) - 1, tag);
-        SDL_Color color = GGIT_COLORS[color_index];
+        int const i_branch = tag;
+        SDL_Color color;
+        if (i_branch != -1) {
+            struct ggit_special_branch* branch = ggit_vector_ref_special_branch(
+                &graph->special_branches,
+                tag
+            );
+
+            color = (SDL_Color){
+                branch->colors_base[0][0],
+                branch->colors_base[0][1],
+                branch->colors_base[0][2],
+            };
+        } else {
+            color = (SDL_Color){
+                0x15,
+                0x15,
+                0x15,
+            };
+        }
         draw_rect_cut(
             renderer,
             commit_x + BORDER,
@@ -853,7 +934,8 @@ ggit_ui_draw_graph(
     }
 
     // Draw spans (debug)
-    ggit_ui_draw_graph__spans(ui, graph, 0, i_max, renderer, &compressed_x);
+    ggit_ui_draw_graph__spans(ui, graph, input, 0, i_max, renderer, &compressed_x);
+
     // Draw connections
     ggit_ui_draw_graph__connections(ui, graph, 0, i_max, renderer, &compressed_x);
 
@@ -892,20 +974,17 @@ ggit_ui_draw_graph(
     ggit_ui_draw_graph__boxes(ui, graph, 0, i_max, renderer, &compressed_x);
 
     // Draw the branch names.
-    int const n_refs = graph->ref_names.size;
-    for (int i = 0; i < n_refs; ++i) {
-        int const commit_i = ggit_vector_get_int(&graph->ref_commits, i);
-
-        int ci = g_height - 1 - commit_i;
-        if (ci > i_max)
-            continue;
-
-        char const* name = ggit_vector_get_string(&graph->ref_names, i);
-
-        int const commit_y = graph_y
-                             + ggit_graph_commit_screen_y_top(ui, commit_i, g_height);
-        util_draw_text(renderer, font_monospaced, name, 0, commit_y, 0, 0);
-    }
+    ggit_ui_draw_graph__refs(
+        ui,
+        graph,
+        input,
+        0,
+        i_max,
+        renderer,
+        font_monospaced,
+        compressed_width,
+        &compressed_x
+    );
 }
 
 static void
@@ -1028,7 +1107,8 @@ main(int argc, char** argv)
                         ui.margin_y = original_ui.margin_y;
                     } else {
                         int delta = -1 + 2 * (event.wheel.y > 0);
-                        ui.graph_y += delta * (ui.item_h + ui.border * 2 + ui.margin_y * 2);
+                        ui.graph_y += delta
+                                      * (ui.item_h + ui.border * 2 + ui.margin_y * 2);
                     }
 
                     break;

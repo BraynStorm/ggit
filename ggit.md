@@ -20,3 +20,8 @@
 - [ ] Add support for git tags.
 - [ ] Add support for Jenkins.
 - [ ] Add support for JIRA.
+
+## Bugs
+- [ ] Branch bugfix/a is stemmed from bugfix/b but not from the head, rather, somewhere in the middle. But they don't collide
+    - [X] ... ??? That makes no sense, yet they are merged.
+    - [ ] Found it, we should go down first, to the level of the parent and then go left/right. Right now, the graph lines go left-right first and then go down to the parent.

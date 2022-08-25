@@ -1,7 +1,6 @@
 #pragma once
 
 #include "ggit-vector.h"
-#include "ggit-ui-settings.h"
 
 #include <libsmallregex.h>
 
