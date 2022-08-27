@@ -8,9 +8,16 @@ set(CMAKE_C_STANDARD 23)
 set(CMAKE_C_STANDARD_REQUIRED 23)
 
 include_directories(${CMAKE_SOURCE_DIR}/deps/include)
+include_directories(${CMAKE_SOURCE_DIR}/deps/small-regex/libsmallregex)
 link_directories(${CMAKE_SOURCE_DIR}/deps/lib)
 
-add_executable(ggit ggit.c ggit-vector.c ggit-graph.c)
+add_executable(
+    ggit
+    ggit.c
+    ggit-vector.c
+    ggit-graph.c
+    deps/small-regex/libsmallregex/libsmallregex.c
+)
 target_link_libraries(ggit SDL2 SDL2main SDL2_ttf)
 
 file(

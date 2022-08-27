@@ -7,6 +7,8 @@
 #include <string.h>
 #include <assert.h>
 
+#include <libsmallregex.h>
+
 
 GGIT_GENERATE_VECTOR_REF_GETTER(struct ggit_commit_parents, commit_parents)
 GGIT_GENERATE_VECTOR_REF_GETTER(struct ggit_commit_tag, commit_tags)
@@ -108,11 +110,96 @@ ggit_load_refs(
     return 0;
 }
 
+
+static bool
+ggit_parse_merge_commit__bitbucket_0(
+    int message_length,
+    char const* merge_commit_message,
+    char** out_name_main,
+    char** out_name_kink
+)
+{
+    /* Like: Merged in build/update-installer-output-paths (pull request #287) */
+
+    char const start_0[] = "Merged in ";
+    int start_0_strlen = sizeof(start_0) - 1;
+    if (!starts_with(merge_commit_message, start_0))
+        /* Not a bitbucket merge */
+        return false;
+
+    int next_space = index_of(
+        message_length - start_0_strlen,
+        merge_commit_message + start_0_strlen,
+        ' '
+    );
+    int open_paren = index_of(
+        message_length - start_0_strlen,
+        merge_commit_message + start_0_strlen,
+        '('
+    );
+
+    int end = (min(open_paren, next_space)) - 1;
+
+    if (next_space <= 0 && open_paren <= 0)
+        return false;
+
+    *out_name_main = 0;
+    *out_name_kink = strndup(next_space, merge_commit_message + start_0_strlen);
+    return true;
+}
+static bool
+ggit_parse_merge_commit__bitbucket_1(
+    int message_length,
+    char const* merge_commit_message,
+    char** out_name_main,
+    char** out_name_kink
+)
+{
+    /* Like: Merged A into B (pull request #287) */
+
+    char const start_0[] = "Merged ";
+    int start_0_strlen = sizeof(start_0) - 1;
+    if (!starts_with(merge_commit_message, start_0))
+        /* Not a bitbucket merge */
+        return false;
+
+    int next_space = index_of(
+        message_length - start_0_strlen,
+        merge_commit_message + start_0_strlen,
+        ' '
+    );
+
+    if (next_space <= 0)
+        return false;
+
+    char const* kink_name = merge_commit_message + start_0_strlen;
+    int kink_strlen = next_space;
+
+    if (0 != memcmp(kink_name + kink_strlen, " into ", 6))
+        return false;
+
+    char const* main_name = kink_name + kink_strlen + 6;
+    int main_strlen = message_length - start_0_strlen - 6 - kink_strlen;
+    next_space = index_of(main_strlen, main_name, ' ');
+    if (next_space > 0) {
+        main_strlen = next_space;
+    } else {
+        int open_paren = index_of(main_strlen, main_name, '(');
+        if (open_paren > 0) {
+            main_strlen = open_paren;
+        }
+    }
+
+    *out_name_main = strndup(main_strlen, main_name);
+    *out_name_kink = strndup(kink_strlen, kink_name);
+    return true;
+}
+
 /* TODO:
     clean up the internals
 */
 static bool
-ggit_parse_merge_commit(
+ggit_parse_merge_commit__git_local(
     int message_length,
     char const* merge_commit_message,
     char** out_name_main,
@@ -134,21 +221,20 @@ ggit_parse_merge_commit(
         merge_commit_message + start_0_strlen,
         '\''
     );
-    if (closing_quote) {
+    if (closing_quote > 0) {
         int kink_len = closing_quote;
         char* kink_name = strndup(kink_len, merge_commit_message + start_0_strlen);
         if (closing_quote + start_0_strlen + 1 != message_length) {
             // into 'branch_main'
             char const* leftover_message = merge_commit_message + start_0_strlen
                                            + closing_quote + 1;
+            char const* main_name;
             if (starts_with(leftover_message, " into ")) {
-                char const* main_name = leftover_message + 6;
-                int main_len = (int)strlen(main_name);
-                /* TODO(boz): Change to strdup. */
-                *out_name_main = strndup(main_len, main_name);
+                main_name = leftover_message + 6;
             } else {
-                *out_name_main = _strdup("master");
+                main_name = "master";
             }
+            *out_name_main = _strdup(main_name);
         } else {
             *out_name_main = _strdup("master");
         }
@@ -157,6 +243,60 @@ ggit_parse_merge_commit(
         return false;
     }
     return true;
+}
+static bool
+ggit_parse_merge_commit__git_remote(
+    int message_length,
+    char const* merge_commit_message,
+    char** out_name_main,
+    char** out_name_kink
+)
+{
+    /* NOTE(boz):
+        Original regex:
+        "Merge remote-tracking branch 'origin/(.+?)'(?: into (.+))?"
+    */
+    static char const start_0[] = "Merge remote-tracking branch '";
+    int start_0_strlen = sizeof(start_0) - 1;
+    if (!starts_with(merge_commit_message, start_0))
+        return false;
+
+    /* TODO: implement. */
+    return false;
+}
+static bool
+ggit_parse_merge_commit(
+    int message_length,
+    char const* merge_commit_message,
+    char** out_name_main,
+    char** out_name_kink
+)
+{
+    return ggit_parse_merge_commit__git_local(
+               message_length,
+               merge_commit_message,
+               out_name_main,
+               out_name_kink
+           )
+           || ggit_parse_merge_commit__git_remote(
+               message_length,
+               merge_commit_message,
+               out_name_main,
+               out_name_kink
+           )
+           || ggit_parse_merge_commit__bitbucket_0(
+               message_length,
+               merge_commit_message,
+               out_name_main,
+               out_name_kink
+           )
+           || ggit_parse_merge_commit__bitbucket_1(
+               message_length,
+               merge_commit_message,
+               out_name_main,
+               out_name_kink
+           )
+           || 0;
 }
 
 static int
@@ -169,6 +309,7 @@ ggit_match_refs_to_commits(
     int count_refs = ref_hashes->size;
     int count_commits = commit_hashes->size;
     for (int r = 0; r < count_refs; ++r) {
+        bool found = false;
         char* ref_hash = ggit_vector_get(ref_hashes, r);
 
         for (int c = 0; c < count_commits; ++c) {
@@ -177,8 +318,13 @@ ggit_match_refs_to_commits(
 
             if (0 == strncmp(commit_hash, ref_hash, commit_hash_len)) {
                 ggit_vector_push(out_ref_commits, &c);
+                found = true;
                 break;
             }
+        }
+        if (!found) {
+            int commit = -1;
+            ggit_vector_push(out_ref_commits, &commit);
         }
     }
 
@@ -201,13 +347,15 @@ struct ggit_commit_tag
 ggit_branch_to_tag(char const* ref_name, struct ggit_vector* special_branches)
 {
     struct ggit_commit_tag tag = { { -1, -1 }, true };
+    if (strcmp(ref_name, "HEAD") == 0)
+        goto end;
     for (int i = 0; i < special_branches->size; ++i) {
         struct ggit_special_branch* sb = ggit_vector_ref_special_branch(
             special_branches,
             i
         );
 
-        if (starts_with(ref_name, sb->match)) {
+        if (regex_matchp(sb->regex, ref_name) == 0) {
             int n_instances = sb->instances.size;
             tag.tag[0] = i;
             for (int j = 0; j < n_instances; ++j) {
@@ -227,6 +375,7 @@ ggit_branch_to_tag(char const* ref_name, struct ggit_vector* special_branches)
             break;
         }
     }
+end:
     if (tag.tag[0] == -1)
         fprintf(stderr, "Ignoring ref %s - no matching special branches.\n", ref_name);
     return tag;
@@ -236,6 +385,8 @@ static struct ggit_commit_tag
 ggit_refname_to_tag(char const* ref_name, struct ggit_vector* special_branches)
 {
     char const prefix_local_branch[] = "refs/heads/";
+    char const prefix_stash[] = "refs/stash";
+    char const prefix_tags[] = "refs/tags/";
     char const prefix_remote_branch[] = "refs/remotes/origin/";
     /* TODO: support git tags and other things. */
     if (starts_with(ref_name, prefix_local_branch))
@@ -248,8 +399,14 @@ ggit_refname_to_tag(char const* ref_name, struct ggit_vector* special_branches)
             ref_name + sizeof(prefix_remote_branch) - 1,
             special_branches
         );
-    else
-        return (struct ggit_commit_tag){ { -1, -1 } };
+    else if (starts_with(ref_name, prefix_stash))
+        return ggit_branch_to_tag(
+            ref_name + sizeof(prefix_stash) - 1,
+            special_branches
+        );
+    else if (starts_with(ref_name, prefix_tags))
+        return ggit_branch_to_tag(ref_name + sizeof(prefix_tags) - 1, special_branches);
+    return (struct ggit_commit_tag){ { -1, -1 }, false };
 }
 
 static int
@@ -284,8 +441,8 @@ ggit_label_merge_commits(
         char* name_kink = 0;
         ggit_parse_merge_commit(msg_len, msg, &name_main, &name_kink);
 
-        struct ggit_commit_tag tag_main = { { -1, -1 }, true };
-        struct ggit_commit_tag tag_kink = { { -1, -1 }, true };
+        struct ggit_commit_tag tag_main = { { -1, -1 }, false };
+        struct ggit_commit_tag tag_kink = { { -1, -1 }, false };
         if (name_main)
             tag_main = ggit_branch_to_tag(name_main, special_branches);
         if (name_kink)
@@ -300,6 +457,9 @@ ggit_label_merge_commits(
             commit_tags,
             my_parents[1]
         );
+
+        if (tag_main.tag[0] == -1)
+            tag_main = *my_tags;
 
         *my_tags = *p0_tags = tag_main;
         *p1_tags = tag_kink;
@@ -350,6 +510,88 @@ ggit_propagate_tags(
         }
     }
 }
+
+static void
+expand_span_merges(struct ggit_column_span* span, int i)
+{
+    span->merge_max = max(span->merge_max, i);
+    span->merge_min = min(span->merge_min, i);
+}
+static void
+expand_span_commits(struct ggit_column_span* span, int i)
+{
+    span->commit_max = max(span->commit_max, i);
+    span->commit_min = min(span->commit_min, i);
+    expand_span_merges(span, i);
+}
+void
+ggit_compute_column_spans(struct ggit_graph* graph)
+{
+    for (int i = 0; i < graph->special_branches.size; ++i) {
+        struct ggit_special_branch* sb = ggit_vector_ref_special_branch(
+            &graph->special_branches,
+            i
+        );
+        ggit_vector_reserve(&sb->spans, sb->instances.size);
+        sb->spans.size = sb->instances.size;
+        for (int j = 0; j < sb->instances.size; ++j) {
+            struct ggit_column_span span = {
+                .merge_min = INT32_MAX,
+                .commit_min = INT32_MAX,
+                .commit_max = INT32_MIN,
+                .merge_max = INT32_MIN,
+            };
+            // "PUSH"
+            *ggit_vector_ref_column_span(&sb->spans, j) = span;
+        }
+    }
+
+    for (int i = 0; i < graph->height; ++i) {
+        struct ggit_commit_tag tag = graph->tags[i];
+        struct ggit_commit_parents parents = graph->parents[i];
+
+        /* TODO: use these as well. */
+        if (tag.tag[0] == -1) {
+            char* hash = graph->hashes[i];
+            char* message = graph->messages[i];
+            int n_message = graph->message_lengths[i];
+            continue;
+        }
+
+        struct ggit_special_branch* sb = ggit_vector_ref_special_branch(
+            &graph->special_branches,
+            tag.tag[0]
+        );
+        struct ggit_column_span* span = ggit_vector_ref_column_span(
+            &sb->spans,
+            tag.tag[1]
+        );
+        expand_span_commits(span, i);
+
+        for (int j = 0; j < 2; ++j) {
+            int const parent = parents.parent[j];
+
+            if (parent != -1) {
+                expand_span_merges(span, parent);
+
+                struct ggit_commit_tag p_tag = graph->tags[parent];
+
+                if (p_tag.tag[0] != -1) {
+                    struct ggit_special_branch* p_sb = ggit_vector_ref_special_branch(
+                        &graph->special_branches,
+                        p_tag.tag[0]
+                    );
+                    struct ggit_column_span* p_span = ggit_vector_ref_column_span(
+                        &p_sb->spans,
+                        p_tag.tag[1]
+                    );
+                    expand_span_merges(p_span, i);
+                }
+            }
+        }
+    }
+}
+
 
 #define GGIT_VECTOR_DEFINE(name, type, initial_size) \
     struct ggit_vector name;                         \
@@ -454,12 +696,7 @@ ggit_graph_load_repository(
                 ggit_vector_push(&commit_message_lengths, &msg_len);
                 ggit_vector_push(&commit_messages, &msg);
                 ggit_vector_push(&commit_hashes, &hash);
-                struct ggit_commit_tag tags = {
-                    {
-                        -1,
-                        -1,
-                    },
-                };
+                struct ggit_commit_tag tags = { { -1, -1 }, false };
                 ggit_vector_push(&commit_tags, &tags);
             }
         }
@@ -474,6 +711,8 @@ ggit_graph_load_repository(
     for (int i = 0; i < out_graph->ref_commits.size; ++i) {
         char* ref_name = ggit_vector_get_string(&out_graph->ref_names, i);
         int index = ggit_vector_get_i32(&out_graph->ref_commits, i);
+        if (index == -1)
+            continue;
         struct ggit_commit_tag* tags = ggit_vector_ref_commit_tags(&commit_tags, index);
 
         struct ggit_commit_tag ref_tag = ggit_refname_to_tag(
@@ -509,6 +748,8 @@ ggit_graph_load_repository(
     out_graph->messages = (char**)commit_messages.data;
     out_graph->tags = (struct ggit_commit_tag*)commit_tags.data;
     out_graph->height = commit_messages.size;
+
+    ggit_compute_column_spans(out_graph);
     return 0;
 }
 
@@ -544,11 +785,9 @@ ggit_graph_clear(struct ggit_graph* graph)
     graph->height = 0;
 
     for (int i = 0; i < graph->special_branches.size; ++i) {
-        struct ggit_special_branch* sb = ggit_vector_ref_special_branch(
-            &graph->special_branches,
-            i
+        ggit_special_branch_clear(
+            ggit_vector_ref_special_branch(&graph->special_branches, i)
         );
-        ggit_vector_clear_and_free(&sb->instances);
     }
 
     ggit_vector_clear_and_free(&graph->ref_names);
@@ -561,12 +800,9 @@ ggit_graph_destroy(struct ggit_graph* graph)
     ggit_graph_clear(graph);
 
     for (int i = 0; i < graph->special_branches.size; ++i) {
-        struct ggit_special_branch* sb = ggit_vector_ref_special_branch(
-            &graph->special_branches,
-            i
+        ggit_special_branch_destroy(
+            ggit_vector_ref_special_branch(&graph->special_branches, i)
         );
-        free(sb->match);
-        ggit_vector_destroy(&sb->instances);
     }
     ggit_vector_destroy(&graph->special_branches);
 
@@ -617,4 +853,19 @@ ggit_graph_load(struct ggit_graph* graph, char const* path_repository)
     free(gitlog);
 
     return 0;
+}
+
+void
+ggit_special_branch_clear(struct ggit_special_branch* sb)
+{
+    ggit_vector_clear_and_free(&sb->instances);
+    ggit_vector_clear(&sb->spans);
+}
+void
+ggit_special_branch_destroy(struct ggit_special_branch* sb)
+{
+    free(sb->name);
+    regex_free(sb->regex);
+    ggit_vector_destroy(&sb->instances);
+    ggit_vector_destroy(&sb->spans);
 }
