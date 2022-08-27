@@ -1,6 +1,7 @@
 ## Tasks
 
 - [ ] TOP PRIORITY move the span-collision code (the static vector stuff) to ggit-vector.c/ggit_load_repository
+- [ ] Allow compressing into other branches.
 - [x] Allow regex matching for special branches.
 - [ ] Draw lines in __style__.
 - [ ] Draw branches on-hover of columns.

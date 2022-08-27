@@ -24,6 +24,9 @@
 
 struct ggit_ui
 {
+    int screen_w;
+    int screen_h;
+
     int graph_x;
     int graph_y;
 
@@ -763,6 +766,7 @@ ggit_ui_draw_graph__spans(
     int const ITEM_BOX_H = ITEM_OUTER_H + MARGIN_Y * 2;
 
     int n_hovered = 0;
+    // puts("\nHovered:");
 
     for (int i = i_from; i < i_to; ++i) {
         int const commit_i = G_HEIGHT - 1 - i;
@@ -825,6 +829,7 @@ ggit_ui_draw_graph__spans(
                 input->mouse_x,
                 input->mouse_y
             )) {
+            printf("* commit=%d, branch=%d, index=%d\n", i, i_branch, index);
             ++n_hovered;
             draw_rect_cut(
                 renderer,
@@ -859,9 +864,12 @@ ggit_ui_draw_graph__commit_messages(
 {
     int const graph_x = ui->graph_x;
     int const graph_y = ui->graph_y;
+
     int const G_WIDTH = graph->width;
     int const G_HEIGHT = graph->height;
 
+    int const SCREEN_W = ui->screen_w;
+    int const SCREEN_H = ui->screen_h;
     int const ITEM_W = ui->item_w;
     int const ITEM_H = ui->item_h;
     int const BORDER = ui->border;
@@ -873,11 +881,15 @@ ggit_ui_draw_graph__commit_messages(
     int const ITEM_BOX_W = ITEM_OUTER_W + MARGIN_X * 2;
     int const ITEM_BOX_H = ITEM_OUTER_H + MARGIN_Y * 2;
 
+
     int const text_x = graph_x + compressed_width * ITEM_BOX_W + ITEM_BOX_W / 2;
     for (int i = i_from; i < i_to; ++i) {
         int const commit_i = G_HEIGHT - 1 - i;
         int const commit_y = graph_y
                              + ggit_graph_commit_screen_y_top(ui, commit_i, G_HEIGHT);
+        if (commit_y < -ITEM_H || commit_y > SCREEN_H)
+            continue;
+
         char const* message = graph->messages[commit_i];
         util_draw_text(renderer, font, message, text_x, commit_y, 0, 0);
     }
@@ -900,6 +912,8 @@ ggit_ui_draw_graph__refs(
     int const G_WIDTH = graph->width;
     int const G_HEIGHT = graph->height;
 
+    int const SCREEN_W = ui->screen_w;
+    int const SCREEN_H = ui->screen_h;
     int const ITEM_W = ui->item_w;
     int const ITEM_H = ui->item_h;
     int const BORDER = ui->border;
@@ -913,6 +927,7 @@ ggit_ui_draw_graph__refs(
 
     int const n_refs = graph->ref_names.size;
     int refs_width = 0;
+
     for (int i = 0; i < n_refs; ++i) {
         int const commit_i = ggit_vector_get_int(&graph->ref_commits, i);
 
@@ -924,10 +939,43 @@ ggit_ui_draw_graph__refs(
 
         int const commit_y = graph_y
                              + ggit_graph_commit_screen_y_top(ui, commit_i, G_HEIGHT);
+        int const commit_y_center = commit_y + ITEM_BOX_H / 2;
+
+        if (commit_y < -ITEM_H || commit_y > SCREEN_H)
+            continue;
+
+
         int w;
         util_draw_text(renderer, font, name, 0, commit_y, &w, 0);
         refs_width = max(refs_width, w);
     }
+
+    set_color(renderer, (SDL_Color){ 0, 0, 0, 0xFF });
+    for (int i = 0; i < n_refs; ++i) {
+        int const commit_i = ggit_vector_get_int(&graph->ref_commits, i);
+
+        int ci = G_HEIGHT - 1 - commit_i;
+        if (ci < i_from || ci >= i_to)
+            continue;
+
+        int const column = ggit_graph_commit_screen_column(
+            graph,
+            compressed_x,
+            commit_i
+        );
+
+        int const commit_y = graph_y
+                             + ggit_graph_commit_screen_y_top(ui, commit_i, G_HEIGHT);
+        int const commit_y_center = commit_y + ITEM_BOX_H / 2
+                                    - 3 /* offset so we don't match with actual graph
+                                            lines. */
+            ;
+
+        int const commit_x = refs_width + graph_x
+                             + ggit_graph_commit_screen_x_center(ui, column);
+        SDL_RenderDrawLine(renderer, 0, commit_y_center, commit_x, commit_y_center);
+    }
+
     return refs_width;
 }
 static void
@@ -945,6 +993,8 @@ ggit_ui_draw_graph__boxes(
     int const G_WIDTH = graph->width;
     int const G_HEIGHT = graph->height;
 
+    int const SCREEN_W = ui->screen_w;
+    int const SCREEN_H = ui->screen_h;
     int const ITEM_W = ui->item_w;
     int const ITEM_H = ui->item_h;
     int const BORDER = ui->border;
@@ -968,6 +1018,10 @@ ggit_ui_draw_graph__boxes(
                              + ggit_graph_commit_screen_x_left(ui, column);
         int const commit_y = MARGIN_Y + graph_y
                              + ggit_graph_commit_screen_y_top(ui, commit_i, G_HEIGHT);
+
+        if (commit_y < -ITEM_H || commit_y > SCREEN_H)
+            continue;
+
         bool is_merge = graph->parents[commit_i].parent[1] != -1;
 
         int const cut = 2 + 2 * is_merge;
@@ -1048,7 +1102,7 @@ ggit_ui_draw_graph(
     TTF_Font* font_monospaced
 )
 {
-    int const i_max = min(graph->height, 150);
+    int const i_max = min(graph->height, 15000000);
     static int compressed_width = 0;
     // Compress X
     static struct ggit_vector compressed_x = { 0 };
@@ -1130,6 +1184,9 @@ ggit_ui_input(struct ggit_ui* ui, struct ggit_input* input, struct ggit_graph* g
 int
 main(int argc, char** argv)
 {
+    struct ggit_input input = { 0 };
+    struct ggit_ui ui = { 0 };
+
     SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS);
     TTF_Init();
     SDL_Window* window;
@@ -1142,13 +1199,9 @@ main(int argc, char** argv)
         &renderer
     );
     SDL_SetWindowTitle(window, "GGit");
-    int window_width;
-    int window_height;
-    SDL_GetWindowSize(window, &window_width, &window_height);
+    SDL_GetWindowSize(window, &ui.screen_w, &ui.screen_h);
     TTF_Font* font = TTF_OpenFont("res/segoeui.ttf", 13);
 
-    struct ggit_input input = { 0 };
-    struct ggit_ui ui = { 0 };
 #define SMALL
 #ifdef SMALL
     ui.item_w = 18;
@@ -1209,8 +1262,8 @@ main(int argc, char** argv)
                     switch (event.window.event) {
                         case SDL_WINDOWEVENT_CLOSE: running = false; break;
                         case SDL_WINDOWEVENT_RESIZED:
-                            window_width = event.window.data1;
-                            window_height = event.window.data2;
+                            ui.screen_w = event.window.data1;
+                            ui.screen_h = event.window.data2;
                             break;
                     }
                 case SDL_MOUSEMOTION:
