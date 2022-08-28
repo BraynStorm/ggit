@@ -32,3 +32,4 @@
     - [ ] Spans are overlapping but merged, why?
 - [ ] Feature stemming from another feature extends the span of the parent.
     - [ ] Probably just have to check if the commit has > 1 parent, and only then extend the parent's span.
+- [ ] Touchpad support is very broken.

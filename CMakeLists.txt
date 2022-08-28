@@ -16,6 +16,7 @@ add_executable(
     ggit.c
     ggit-vector.c
     ggit-graph.c
+    ggit-ui.c
     deps/small-regex/libsmallregex/libsmallregex.c
 )
 target_link_libraries(ggit SDL2 SDL2main SDL2_ttf)
