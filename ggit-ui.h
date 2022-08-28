@@ -25,6 +25,22 @@ struct ggit_ui
     SDL_Renderer* renderer;
     TTF_Font* font;
 
+    /* Selection */
+    struct selection
+    {
+        int start_x;
+        int start_y;
+        int end_x;
+        int end_y;
+        struct ggit_vector selected_commits;
+    } select;
+
+    struct cache
+    {
+        int compressed_width;
+        struct ggit_vector compressed_x; /* int */
+    } cache;
+
     /*
     =============
     Windows
@@ -98,8 +114,16 @@ int ggit_ui_button(
     UTILS
 ===============
 */
-
-
+struct ggit_size
+{
+    int w;
+    int h;
+};
+struct ggit_size ggit_ui_draw_text(
+    SDL_Renderer* renderer,
+    TTF_Font* font,
+    char const* text
+);
 static inline bool
 point_in_rect(int x0, int y0, int x1, int y1, int mx, int my)
 {

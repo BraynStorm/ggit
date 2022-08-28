@@ -84,7 +84,7 @@ ggit_vector_clear_and_free(struct ggit_vector* vec)
     ggit_vector_clear(vec);
 }
 void
-ggit_vector_insert(struct ggit_vector* vec, int index, void* value)
+ggit_vector_insert(struct ggit_vector* vec, int index, void const* value)
 {
     int const size = vec->size;
     int const value_size = vec->value_size;
@@ -108,7 +108,7 @@ ggit_vector_insert(struct ggit_vector* vec, int index, void* value)
     vec->size = size + 1;
 }
 void
-ggit_vector_push(struct ggit_vector* vec, void* value)
+ggit_vector_push(struct ggit_vector* vec, void const* value)
 {
     ggit_vector_insert(vec, vec->size, value);
 }

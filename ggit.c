@@ -672,7 +672,7 @@ ggit_ui_draw_graph__commit_messages(
         ggit_ui_draw_text(renderer, font, message, text_x, commit_y, 0, 0);
     }
 }
-static int
+static void
 ggit_ui_draw_graph__refs(
     struct ggit_ui* ui,
     struct ggit_graph* graph,
@@ -705,7 +705,6 @@ ggit_ui_draw_graph__refs(
     int const ITEM_BOX_H = ITEM_OUTER_H + MARGIN_Y * 2;
 
     int const n_refs = graph->ref_names.size;
-    int refs_width = 0;
 
     for (int i = 0; i < n_refs; ++i) {
         int const commit_i = ggit_vector_get_int(&graph->ref_commits, i);
@@ -724,7 +723,6 @@ ggit_ui_draw_graph__refs(
 
         int w;
         ggit_ui_draw_text(renderer, font, name, 0, commit_y, &w, 0);
-        refs_width = max(refs_width, w);
     }
 
     set_color(renderer, (SDL_Color){ 0, 0, 0, 0xFF });
@@ -745,7 +743,13 @@ ggit_ui_draw_graph__refs(
 
         int const commit_x = refs_width + graph_x
                              + ggit_graph_commit_x_center(ui, column);
-        SDL_RenderDrawLine(renderer, 0, commit_y_center, commit_x, commit_y_center);
+        SDL_RenderDrawLine(
+            renderer,
+            refs_width,
+            commit_y_center,
+            commit_x,
+            commit_y_center
+        );
     }
 
     return refs_width;
@@ -811,6 +815,18 @@ ggit_ui_draw_graph__boxes(
                 0x15,
             };
         }
+
+        for (int j = 0; j < ui->select.selected_commits.size; ++j) {
+            int selected = ggit_vector_get_int(&ui->select.selected_commits, j);
+            if (selected == commit_i) {
+                color = (SDL_Color){
+                    0xA5,
+                    0xA5,
+                    0xA5,
+                };
+                break;
+            }
+        }
         ggit_ui_draw_rect_cut(
             ui->renderer,
             commit_x,
@@ -869,35 +885,35 @@ ggit_ui_draw_graph(
     TTF_Font* const font = ui->font;
 
     int const i_max = min(graph->height, 15000000);
-    static int compressed_width = 0;
+    int* compressed_width = &ui->cache.compressed_width;
     // Compress X
-    static struct ggit_vector compressed_x = { 0 };
-    if (compressed_x.size != graph->width) {
-        compressed_width = ggit_ui_graph__generate_compressed_x(
+    struct ggit_vector* compressed_x = &ui->cache.compressed_x;
+    if (compressed_x->size != graph->width) {
+        *compressed_width = ggit_ui_graph__generate_compressed_x(
             graph,
             0,
             i_max,
-            &compressed_x
+            compressed_x
         );
     }
 
     // Draw the refs.
-    int refs_width = ggit_ui_draw_graph__refs(
+    ggit_ui_draw_graph__refs(
         ui,
         graph,
         input,
         0,
         i_max,
-        compressed_width,
-        &compressed_x
+        *compressed_width,
+        compressed_x
     );
     ui->graph_x += refs_width;
 
     // Draw spans (debug)
-    ggit_ui_draw_graph__spans(ui, graph, input, 0, i_max, &compressed_x);
+    ggit_ui_draw_graph__spans(ui, graph, input, 0, i_max, compressed_x);
 
     // Draw connections
-    ggit_ui_draw_graph__connections(ui, graph, 0, i_max, &compressed_x);
+    ggit_ui_draw_graph__connections(ui, graph, 0, i_max, compressed_x);
 
     // Draw commit messages
     ggit_ui_draw_graph__commit_messages(
@@ -905,8 +921,8 @@ ggit_ui_draw_graph(
         graph,
         0,
         i_max,
-        compressed_width,
-        &compressed_x
+        *compressed_width,
+        compressed_x
     );
 
     // Draw the crosshair
@@ -929,15 +945,111 @@ ggit_ui_draw_graph(
     );
 
     // Draw the blocks.
-    ggit_ui_draw_graph__boxes(ui, graph, 0, i_max, &compressed_x);
+    ggit_ui_draw_graph__boxes(ui, graph, 0, i_max, compressed_x);
 
     ui->graph_x -= refs_width;
 }
 
 static void
+ggit_ui_draw_overlay(
+    struct ggit_ui* ui,
+    struct ggit_input* input,
+    struct ggit_graph* graph
+)
+{
+    if (ggit_ui_button(
+            ui,
+            input,
+            "New branch",
+            0,
+            0,
+            (unsigned int[]){ 0xFF, 0xCC, 0xEE, 0xFF }
+        )) {
+        //
+    }
+
+    // Selections
+    int const lmb = input->buttons[0];
+    if (lmb & 1) {
+        // Selecting
+        if (ui->select.start_x < 0) {
+            // Start selection
+            ui->select.start_x = input->mouse_x;
+            ui->select.start_y = input->mouse_y;
+        }
+
+        ui->select.end_x = input->mouse_x;
+        ui->select.end_y = input->mouse_y;
+
+        ggit_ui_draw_rect_cut(
+            ui->renderer,
+            ui->select.start_x,
+            ui->select.start_y,
+            ui->select.end_x,
+            ui->select.end_y,
+            2,
+            (SDL_Color){ 0x11, 0x11, 0x11, 0xFF }
+        );
+
+
+    } else if (ui->select.start_x >= 0) {
+        // End selection
+
+        int const graph_x = ui->graph_x;
+        int const graph_y = ui->graph_y;
+        int const G_WIDTH = graph->width;
+        int const G_HEIGHT = graph->height;
+
+        int const SCREEN_W = ui->screen_w;
+        int const SCREEN_H = ui->screen_h;
+        int const ITEM_W = ui->item_w;
+        int const ITEM_H = ui->item_h;
+        int const BORDER = ui->border;
+        int const MARGIN_X = ui->margin_x;
+        int const MARGIN_Y = ui->margin_y;
+
+        int const ITEM_OUTER_W = ITEM_W + BORDER * 2;
+        int const ITEM_OUTER_H = ITEM_H + BORDER * 2;
+        int const ITEM_BOX_W = ITEM_OUTER_W + MARGIN_X * 2;
+        int const ITEM_BOX_H = ITEM_OUTER_H + MARGIN_Y * 2;
+
+        if (!ui->select.selected_commits.value_size)
+            ggit_vector_init(&ui->select.selected_commits, sizeof(int));
+        ggit_vector_clear(&ui->select.selected_commits);
+        for (int i = G_HEIGHT - 1; i >= 0; --i) {
+            int const commit_i = G_HEIGHT - i - 1;
+            int const column = ggit_graph_commit_column(
+                graph,
+                &ui->cache.compressed_x,
+                commit_i
+            );
+
+            int const commit_x = graph_x + ggit_graph_commit_x_center(ui, column);
+            int const commit_y = graph_y
+                                 + ggit_graph_commit_y_center(ui, commit_i, G_HEIGHT);
+            if (commit_y < -ITEM_H || commit_y > ui->screen_h)
+                continue;
+
+            if (point_in_rect(
+                    ui->select.start_x,
+                    ui->select.start_y,
+                    ui->select.end_x,
+                    ui->select.end_y,
+                    commit_x,
+                    commit_y
+                )) {
+                ggit_vector_push(&ui->select.selected_commits, &commit_i);
+            }
+        }
+
+        ui->select.start_x = -1;
+        ui->select.start_y = -1;
+    }
+}
+static void
 ggit_ui_input(struct ggit_ui* ui, struct ggit_input* input, struct ggit_graph* graph)
 {
-    if (input->buttons[0]) {
+    if (input->buttons[2] & 1) {
         ui->graph_x += input->delta_mouse_x;
         ui->graph_y += input->delta_mouse_y;
     }
@@ -991,7 +1103,7 @@ main(int argc, char** argv)
     ggit_vector_push(&graph.special_branches, &(struct ggit_special_branch){ _strdup("hotfix/"),  regex_compile("^hotfix/"),  -1, { [0] = { 0xE6, 0x00, 0x00 }, [1] = {} } });
     ggit_vector_push(&graph.special_branches, &(struct ggit_special_branch){ _strdup("release/"), regex_compile("^release/"), -1, { [0] = { 0x00, 0x68, 0xDE }, [1] = {} } });
     ggit_vector_push(&graph.special_branches, &(struct ggit_special_branch){ _strdup("bugfix/"),  regex_compile("^bugfix/"),  +1, { [0] = { 0xE6, 0x96, 0x17 }, [1] = {} } });
-    ggit_vector_push(&graph.special_branches, &(struct ggit_special_branch){ _strdup("develop/"),  regex_compile("^develop/"),  +1, { [0] = { 0xB8, 0x16, 0xD9 }, [1] = {} } });
+    ggit_vector_push(&graph.special_branches, &(struct ggit_special_branch){ _strdup("develop/"), regex_compile("^develop/"), +1, { [0] = { 0xB8, 0x16, 0xD9 }, [1] = {} } });
     ggit_vector_push(&graph.special_branches, &(struct ggit_special_branch){ _strdup("sprint/"),  regex_compile("^sprint/"),  +1, { [0] = { 0xB8, 0x16, 0xD9 }, [1] = {} } });
     ggit_vector_push(&graph.special_branches, &(struct ggit_special_branch){ _strdup("feature/"), regex_compile("^feature/"), +1, { [0] = { 0x34, 0xD3, 0xE5 }, [1] = {} } });
     ggit_vector_push(&graph.special_branches, &(struct ggit_special_branch){ _strdup(""),         regex_compile(".*"),        +1, { [0] = { 0xCC, 0xCC, 0xCC }, [1] = {} } });
@@ -1036,10 +1148,8 @@ main(int argc, char** argv)
                             break;
                     }
                 case SDL_MOUSEMOTION:
-                    if (input.buttons[0]) {
-                        input.delta_mouse_x += event.motion.x - input.mouse_x;
-                        input.delta_mouse_y += event.motion.y - input.mouse_y;
-                    }
+                    input.delta_mouse_x += event.motion.x - input.mouse_x;
+                    input.delta_mouse_y += event.motion.y - input.mouse_y;
                     input.mouse_x = event.motion.x;
                     input.mouse_y = event.motion.y;
                     break;
@@ -1049,7 +1159,8 @@ main(int argc, char** argv)
                     break;
                 case SDL_MOUSEWHEEL:
                     if (input.is_ctrl_down) {
-                        scale += 0.1f * (-1.0f + 2.0f * (event.wheel.y > 0));
+                        scale += 0.1f * (-1.0f + 2.0f * (event.wheel.y > 0))
+                                 * (event.wheel.y != 0);
                         scale = max(scale, 0.1f);
 
                         ui.item_w = original_ui.item_w * scale;
@@ -1058,7 +1169,8 @@ main(int argc, char** argv)
                         ui.margin_x = original_ui.margin_x;
                         ui.margin_y = original_ui.margin_y;
                     } else {
-                        int delta = -1 + 2 * (event.wheel.y > 0);
+                        int delta = (-1 + 2 * (event.wheel.y > 0))
+                                    * (event.wheel.y != 0);
                         ui.graph_y += delta
                                       * (ui.item_h + ui.border * 2 + ui.margin_y * 2);
                     }
@@ -1086,6 +1198,7 @@ main(int argc, char** argv)
         ggit_ui_input(&ui, &input, &graph);
         SDL_SetRenderDrawColor(renderer, 245, 245, 245, 255);
         SDL_RenderClear(renderer);
+        ggit_ui_draw_overlay(&ui, &input, &graph);
         ggit_ui_draw_graph(&ui, &input, &graph);
         SDL_RenderPresent(renderer);
     }

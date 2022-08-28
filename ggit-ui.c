@@ -166,15 +166,28 @@ ggit_ui_button(
     unsigned color[4]
 )
 {
-    int width = 0;
-    int height = 0;
+    int text_w;
+    int text_h;
+    ggit_ui_draw_text(ui->renderer, ui->font, text, x, y, &text_w, &text_h);
+
     bool hovered = point_in_rect(
         x,
         y,
-        x + width,
-        y + height,
+        x + text_w,
+        y + text_h,
         input->mouse_x,
         input->mouse_y
     );
-    return hovered;
+
+    unsigned lmb = input->buttons[0];
+    return hovered && lmb && !(lmb & 1);
+}
+
+
+struct ggit_size ggit_ui_draw_text(
+    SDL_Renderer* renderer,
+    TTF_Font* font,
+    char const* text
+){
+    
 }

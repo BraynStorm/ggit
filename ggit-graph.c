@@ -330,25 +330,13 @@ ggit_match_refs_to_commits(
 
     return 0;
 }
-// static enum ggit_primary_tag
-// ggit_local_branch_to_tag__known(char const* ref_name, int* offset)
-// {
-//     /* PERF(boz):
-//         Convert ot hashmap find operation for performance
-//     */
-//     if (starts_with(ref_name, "master"))
-//     else if (starts_with(ref_name, "feature"))
-//     else if (starts_with(ref_name, "bugfix"))
-//     else if (starts_with(ref_name, "hotfix"))
-//     else if (starts_with(ref_name, "release"))
-//     else if (starts_with(ref_name, "develop") || starts_with(ref_name, "sprint"))
-// }
 struct ggit_commit_tag
 ggit_branch_to_tag(char const* ref_name, struct ggit_vector* special_branches)
 {
     struct ggit_commit_tag tag = { { -1, -1 }, true };
     if (strcmp(ref_name, "HEAD") == 0)
         goto end;
+
     for (int i = 0; i < special_branches->size; ++i) {
         struct ggit_special_branch* sb = ggit_vector_ref_special_branch(
             special_branches,
@@ -549,14 +537,6 @@ ggit_compute_column_spans(struct ggit_graph* graph)
     for (int i = 0; i < graph->height; ++i) {
         struct ggit_commit_tag tag = graph->tags[i];
         struct ggit_commit_parents parents = graph->parents[i];
-
-        /* TODO: use these as well. */
-        if (tag.tag[0] == -1) {
-            char* hash = graph->hashes[i];
-            char* message = graph->messages[i];
-            int n_message = graph->message_lengths[i];
-            continue;
-        }
 
         struct ggit_special_branch* sb = ggit_vector_ref_special_branch(
             &graph->special_branches,
