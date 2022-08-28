@@ -779,25 +779,24 @@ ggit_ui_draw_graph__boxes(
 
     for (int i = i_from; i < i_to; ++i) {
         int const commit_i = G_HEIGHT - 1 - i;
-        int const tag = graph->tags[commit_i].tag[0];
+        int const i_branch = graph->tags[commit_i].tag[0];
         int const column = ggit_graph_commit_column(graph, compressed_x, commit_i);
-        int const commit_x = MARGIN_X + graph_x + ggit_graph_commit_x_left(ui, column);
-        int const commit_y = MARGIN_Y + graph_y
-                             + ggit_graph_commit_y_top(ui, commit_i, G_HEIGHT);
+        int const commit_x = MARGIN_X + graph_x + BORDER
+                             + ggit_graph_commit_x_left(ui, column);
+        int const commit_y = MARGIN_Y + graph_y + BORDER
+                             + +ggit_graph_commit_y_top(ui, commit_i, G_HEIGHT);
+
+        bool const is_merge = graph->parents[commit_i].parent[1] != -1;
+        int const cut = 2 + 2 * is_merge;
 
         if (commit_y < -ITEM_H || commit_y > SCREEN_H)
             continue;
 
-        bool is_merge = graph->parents[commit_i].parent[1] != -1;
-
-        int const cut = 2 + 2 * is_merge;
-
-        int const i_branch = tag;
         SDL_Color color;
         if (i_branch != -1) {
             struct ggit_special_branch* branch = ggit_vector_ref_special_branch(
                 &graph->special_branches,
-                tag
+                i_branch
             );
 
             color = (SDL_Color){
@@ -814,10 +813,10 @@ ggit_ui_draw_graph__boxes(
         }
         ggit_ui_draw_rect_cut(
             ui->renderer,
-            commit_x + BORDER,
-            commit_y + BORDER,
-            commit_x + BORDER + ITEM_W,
-            commit_y + BORDER + ITEM_H,
+            commit_x,
+            commit_y,
+            commit_x + ITEM_W,
+            commit_y + ITEM_H,
             cut,
             color
         );
