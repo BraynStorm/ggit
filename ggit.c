@@ -1281,7 +1281,6 @@ main(int argc, char** argv)
         for (int i = 0; i < ARRAY_COUNT(input.buttons); ++i) {
             input.buttons[i] %= 2;
         }
-        int a;
 
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
@@ -1294,6 +1293,7 @@ main(int argc, char** argv)
                             ui.screen_h = event.window.data2;
                             break;
                     }
+                    break;
                 case SDL_MOUSEMOTION:
                     input.delta_mouse_x += event.motion.x - input.mouse_x;
                     input.delta_mouse_y += event.motion.y - input.mouse_y;
@@ -1333,10 +1333,8 @@ main(int argc, char** argv)
                         input.is_ctrl_down = true;
                     }
                     if (event.key.keysym.scancode == SDL_SCANCODE_F5) {
-                        ggit_graph_load(&graph, "D:/public/ggit/tests/3");
-                    }
-                    if (event.key.keysym.scancode == SDL_SCANCODE_F6) {
-                        ggit_graph_load(&graph, "D:/Stuff/work/Columbo");
+                        ggit_graph_reload(&graph);
+                        /* TODO: also reset the UI state. */
                     }
                     break;
             }

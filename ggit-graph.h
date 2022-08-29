@@ -77,6 +77,8 @@ struct ggit_graph
     int width;
     int height;
 
+    char* path;
+
     int* message_lengths;
     char** messages;
     char** hashes;
@@ -95,6 +97,7 @@ int ggit_graph_init(struct ggit_graph*);
 void ggit_graph_destroy(struct ggit_graph*);
 void ggit_graph_clear(struct ggit_graph*);
 int ggit_graph_load(struct ggit_graph*, char const* path_repository);
+int ggit_graph_reload(struct ggit_graph*);
 
 void ggit_special_branch_clear(struct ggit_special_branch*);
 void ggit_special_branch_destroy(struct ggit_special_branch*);

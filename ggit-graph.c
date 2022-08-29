@@ -777,6 +777,7 @@ ggit_graph_clear(struct ggit_graph* graph)
 void
 ggit_graph_destroy(struct ggit_graph* graph)
 {
+    free(graph->path);
     ggit_graph_clear(graph);
 
     for (int i = 0; i < graph->special_branches.size; ++i) {
@@ -793,6 +794,17 @@ ggit_graph_destroy(struct ggit_graph* graph)
 int
 ggit_graph_load(struct ggit_graph* graph, char const* path_repository)
 {
+    if (graph->path)
+        free(graph->path);
+    graph->path = _strdup(path_repository);
+
+    ggit_graph_reload(graph);
+    return 0;
+}
+
+int
+ggit_graph_reload(struct ggit_graph* graph)
+{
     time_t start = time(0);
     time_t took;
 
@@ -802,32 +814,33 @@ ggit_graph_load(struct ggit_graph* graph, char const* path_repository)
         cmd_load_commits,
         sizeof(cmd_load_commits),
         "git -C \"%s\" log --reverse --all --pretty=format:\"%%h|%%p|%%s\"",
-        path_repository
+        graph->path
     );
     sprintf_s(
         cmd_load_refs,
         sizeof(cmd_load_refs),
         "git -C \"%s\" show-ref",
-        path_repository
+        graph->path
     );
 
     char* gitlog;
     int gitlog_len;
     ggit_run(cmd_load_commits, &gitlog, &gitlog_len);
     took = time(0) - start;
-    printf("Loading commits took %llds\n", took);
+    printf("ggit_graph_reload: Loading commits took %llds\n", took);
 
     start += took;
     char* refs;
     int refs_len;
     ggit_run(cmd_load_refs, &refs, &refs_len);
     took = time(0) - start;
-    printf("Loading branches took %llds\n", took);
+    printf("ggit_graph_reload: Loading branches took %llds\n", took);
+
 
     start += took;
     ggit_graph_load_repository(gitlog_len, gitlog, refs_len, refs, graph);
     took = time(0) - start;
-    printf("Parsing took %llds\n", took);
+    printf("ggit_graph_reload: Parsing took %llds\n", took);
 
     free(refs);
     free(gitlog);
