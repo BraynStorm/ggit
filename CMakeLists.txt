@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.22)
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/run/${CMAKE_BUILD_TYPE}")
+set(CMAKE_INTERPROCEDURAL_OPTIMIZATION ON)
+set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_Debug OFF)
 
 project(ggit C)
 
@@ -16,6 +18,7 @@ add_executable(
     ggit.c
     ggit-vector.c
     ggit-graph.c
+    ggit-ui.c
     deps/small-regex/libsmallregex/libsmallregex.c
 )
 target_link_libraries(ggit SDL2 SDL2main SDL2_ttf)
