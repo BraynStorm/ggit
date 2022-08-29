@@ -1294,6 +1294,10 @@ main(int argc, char** argv)
                             break;
                     }
                     break;
+                case SDL_DROPFILE:
+                    ggit_graph_load(&graph, event.drop.file);
+                    SDL_free(event.drop.file);
+                    break;
                 case SDL_MOUSEMOTION:
                     input.delta_mouse_x += event.motion.x - input.mouse_x;
                     input.delta_mouse_y += event.motion.y - input.mouse_y;
