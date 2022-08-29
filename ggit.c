@@ -14,6 +14,7 @@
 
 #include "ggit-vector.h"
 #include "ggit-graph.h"
+#include "ggit-git.h"
 #include "ggit-ui.h"
 
 #define WIN32_LEAN_AND_MEAN
@@ -943,58 +944,220 @@ ggit_ui_draw_graph(
 }
 
 static bool
-ggit_ui_draw_overlay__create_selection(
+ggit_ui_draw_overlay__selection_start(
     struct ggit_ui* ui,
     struct ggit_input* input,
     struct ggit_graph* graph
 )
 {
-    if (ui->select.start_x < 0) {
+    if (ui->action && ui->action != dragging_selection)
+        return false;
+
+    if (ui->select.start_x <= 0) {
         // Start selection
         ui->select.start_x = input->mouse_x;
         ui->select.start_y = input->mouse_y;
+        ggit_vector_clear(&ui->select.selected_commits);
     }
 
     ui->select.end_x = input->mouse_x;
     ui->select.end_y = input->mouse_y;
 
-    SDL_Point points[] = {
-        {
-            ui->select.start_x,
-            ui->select.start_y,
-        },
-        {
-            ui->select.end_x,
-            ui->select.start_y,
-        },
-        {
-            ui->select.end_x,
-            ui->select.end_y,
-        },
-        {
-            ui->select.start_x,
-            ui->select.end_y,
-        },
-        {
-            ui->select.start_x,
-            ui->select.start_y,
-        },
+    SDL_Renderer* const renderer = ui->renderer;
 
+    SDL_Point points[] = {
+        { ui->select.start_x, ui->select.start_y },
+        { ui->select.end_x, ui->select.start_y },
+        { ui->select.end_x, ui->select.end_y },
+        { ui->select.start_x, ui->select.end_y },
+        { ui->select.start_x, ui->select.start_y },
     };
-    SDL_SetRenderDrawColor(ui->renderer, 0x50, 0x50, 0x50, 0xFF);
-    SDL_RenderDrawLines(ui->renderer, points, ARRAY_COUNT(points));
+    SDL_SetRenderDrawColor(renderer, 0x50, 0x50, 0x50, 0xFF);
+    SDL_RenderDrawLines(renderer, points, ARRAY_COUNT(points));
+
+    ui->action = dragging_selection;
     return true;
 }
+
+/* Returns the commit_i of the commit at the given point, -1 if there isn't any. */
+static int
+find_commit_at_point(
+    struct ggit_ui* const ui,
+    struct ggit_input* const input,
+    struct ggit_graph* const graph,
+    int const mx,
+    int const my
+)
+{
+    int const graph_x = ui->graph_x;
+    int const graph_y = ui->graph_y;
+    int const G_WIDTH = graph->width;
+    int const G_HEIGHT = graph->height;
+
+    int const SCREEN_W = ui->screen_w;
+    int const SCREEN_H = ui->screen_h;
+    int const ITEM_W = ui->item_w;
+    int const ITEM_H = ui->item_h;
+    int const BORDER = ui->border;
+    int const MARGIN_X = ui->margin_x;
+    int const MARGIN_Y = ui->margin_y;
+
+    int const ITEM_OUTER_W = ITEM_W + BORDER * 2;
+    int const ITEM_OUTER_H = ITEM_H + BORDER * 2;
+    int const ITEM_BOX_W = ITEM_OUTER_W + MARGIN_X * 2;
+    int const ITEM_BOX_H = ITEM_OUTER_H + MARGIN_Y * 2;
+
+    for (int i = 0; i < G_HEIGHT; ++i) {
+        int const commit_i = G_HEIGHT - 1 - i;
+        int const commit_y_top_src = ggit_graph_commit_y_top(ui, commit_i, G_HEIGHT);
+
+        int const commit_column = ggit_graph_commit_column(
+            graph,
+            &ui->cache.compressed_x,
+            commit_i
+        );
+        int const commit_x_left_src = ggit_graph_commit_x_left(ui, commit_column);
+
+        int const commit_x_left = graph_x + MARGIN_X + BORDER + commit_x_left_src;
+        int const commit_y_top = graph_y + MARGIN_Y + BORDER + commit_y_top_src;
+        int const commit_x_right = commit_x_left + ITEM_W;
+        int const commit_y_bottom = commit_y_top + ITEM_H;
+
+        bool const in_rect = point_in_rect(
+            commit_x_left,
+            commit_y_top,
+            commit_x_right,
+            commit_y_bottom,
+            mx,
+            my
+        );
+
+        if (in_rect)
+            return commit_i;
+    }
+    return -1;
+}
+
 static bool
-ggit_ui_draw_overlay__drag_selection(
+ggit_ui_draw_overlay__commits_drag(
     struct ggit_ui* ui,
     struct ggit_input* input,
     struct ggit_graph* graph
 )
 {
-    if (ui->select.selected_commits.size == 0) {
+    if (ui->action && ui->action != dragging_commit)
         return false;
+
+    int const graph_x = ui->graph_x;
+    int const graph_y = ui->graph_y;
+    int const G_WIDTH = graph->width;
+    int const G_HEIGHT = graph->height;
+
+    int const SCREEN_W = ui->screen_w;
+    int const SCREEN_H = ui->screen_h;
+    int const ITEM_W = ui->item_w;
+    int const ITEM_H = ui->item_h;
+    int const BORDER = ui->border;
+    int const MARGIN_X = ui->margin_x;
+    int const MARGIN_Y = ui->margin_y;
+
+    int const ITEM_OUTER_W = ITEM_W + BORDER * 2;
+    int const ITEM_OUTER_H = ITEM_H + BORDER * 2;
+    int const ITEM_BOX_W = ITEM_OUTER_W + MARGIN_X * 2;
+    int const ITEM_BOX_H = ITEM_OUTER_H + MARGIN_Y * 2;
+
+    int const mx = input->mouse_x;
+    int const my = input->mouse_y;
+
+    int n_selected = ui->select.selected_commits.size;
+    if (ui->action == dragging_commit) {
+        goto found;
     }
+
+    if (ui->action == nothing && !n_selected) {
+        int commit = find_commit_at_point(ui, input, graph, mx, my);
+        if (commit != -1) {
+            // This commit is solo-dragged. Select it. And carry on.
+            ggit_vector_push(&ui->select.selected_commits, &commit);
+            n_selected = 1;
+            goto found;
+        }
+    }
+
+    for (int i = 0; i < n_selected; ++i) {
+        int const commit_i = ggit_vector_get_int(&ui->select.selected_commits, i);
+        int const commit_column = ggit_graph_commit_column(
+            graph,
+            &ui->cache.compressed_x,
+            commit_i
+        );
+        int const commit_x_left_src = ggit_graph_commit_x_left(ui, commit_column);
+        int const commit_y_top_src = ggit_graph_commit_y_top(ui, commit_i, G_HEIGHT);
+
+        int const commit_x_left = graph_x + MARGIN_X + BORDER + commit_x_left_src;
+        int const commit_y_top = graph_y + MARGIN_Y + BORDER + commit_y_top_src;
+        int const commit_x_right = commit_x_left + ITEM_W;
+        int const commit_y_bottom = commit_y_top + ITEM_H;
+
+        bool const in_rect = point_in_rect(
+            commit_x_left,
+            commit_y_top,
+            commit_x_right,
+            commit_y_bottom,
+            mx,
+            my
+        );
+
+        if (in_rect)
+            goto found;
+    }
+    goto not_found;
+
+found:;
+    ui->action = dragging_commit;
+found_and_known:;
+    {
+        /* We found a commit that is starting to get dragged. */
+        SDL_Renderer* const renderer = ui->renderer;
+        for (int i = 0; i < n_selected; ++i) {
+            int fake_commit_left_x = mx - ITEM_W / 2;
+            int fake_commit_top_y = my - ITEM_H / 2 - ITEM_BOX_H * i;
+            SDL_SetRenderDrawColor(renderer, 0x10, 0x10, 0x10, 0xFF);
+            SDL_RenderDrawLine(
+                renderer,
+                mx,
+                fake_commit_top_y,
+                mx,
+                fake_commit_top_y + ITEM_BOX_H
+            );
+            ggit_ui_draw_rect_cut(
+                renderer,
+                fake_commit_left_x,
+                fake_commit_top_y,
+                fake_commit_left_x + ITEM_W,
+                fake_commit_top_y + ITEM_H,
+                3,
+                (SDL_Color){ 0x10, 0x10, 0x10, 0xFF }
+            );
+        }
+    }
+    return true;
+
+not_found:;
+    return false;
+}
+
+static bool
+ggit_ui_draw_overlay__selection_end(
+    struct ggit_ui* ui,
+    struct ggit_input* input,
+    struct ggit_graph* graph
+)
+{
+    if (ui->action != dragging_selection)
+        return false;
+    if (ui->select.start_x < 0)
+        return false;
 
     int const graph_x = ui->graph_x;
     int const graph_y = ui->graph_y;
@@ -1019,57 +1182,132 @@ ggit_ui_draw_overlay__drag_selection(
     int const end_x = ui->select.end_x;
     int const end_y = ui->select.end_y;
 
+    ggit_vector_clear(&ui->select.selected_commits);
+    if (0 && start_x == end_x && start_y == end_y) {
+        for (int i = G_HEIGHT - 1; i >= 0; --i) {
+            int const commit_i = G_HEIGHT - i - 1;
+            int const column = ggit_graph_commit_column(
+                graph,
+                &ui->cache.compressed_x,
+                commit_i
+            );
 
-    int const n_selected = ui->select.selected_commits.size;
-    for (int i = 0; i < n_selected; ++i) {
-        int const commit_i = ggit_vector_get_int(&ui->select.selected_commits, i);
-        int const column = ggit_graph_commit_column(
-            graph,
-            &ui->cache.compressed_x,
-            commit_i
-        );
+            int const commit_x_left = graph_x + MARGIN_X + BORDER
+                                      + ggit_graph_commit_x_left(ui, column);
+            int const commit_y_top = graph_y + MARGIN_Y + BORDER
+                                     + ggit_graph_commit_y_top(ui, commit_i, G_HEIGHT);
+            int const commit_x_right = commit_x_left + ITEM_W;
+            int const commit_y_bottom = commit_y_top + ITEM_H;
 
-        int const commit_x_left = graph_x + MARGIN_X + BORDER
-                                  + ggit_graph_commit_x_left(ui, column);
-        int const commit_y_top = graph_y + MARGIN_Y + BORDER
-                                 + ggit_graph_commit_y_top(ui, commit_i, G_HEIGHT);
-        int const commit_x_right = commit_x_left + ITEM_W;
-        int const commit_y_bottom = commit_y_top + ITEM_H;
+            if (commit_y_bottom <= 0 || commit_y_top >= ui->screen_h)
+                continue;
 
-        if (point_in_rect(
-                commit_x_left,
-                commit_y_top,
-                commit_x_right,
-                commit_y_bottom,
-                start_x,
-                start_y
-            )) {
-            goto found;
+            if (point_in_rect(
+                    commit_x_left,
+                    commit_y_top,
+                    commit_x_right,
+                    commit_y_bottom,
+                    start_x,
+                    start_y
+                )) {
+                ggit_vector_push(&ui->select.selected_commits, &commit_i);
+            }
+        }
+    } else {
+        for (int i = G_HEIGHT - 1; i >= 0; --i) {
+            int const commit_i = G_HEIGHT - i - 1;
+            int const column = ggit_graph_commit_column(
+                graph,
+                &ui->cache.compressed_x,
+                commit_i
+            );
+
+            int const commit_x = graph_x + ggit_graph_commit_x_center(ui, column);
+            int const commit_y = graph_y
+                                 + ggit_graph_commit_y_center(ui, commit_i, G_HEIGHT);
+            if (commit_y < -ITEM_H || commit_y > ui->screen_h)
+                continue;
+
+            if (point_in_rect(
+                    ui->select.start_x,
+                    ui->select.start_y,
+                    ui->select.end_x,
+                    ui->select.end_y,
+                    commit_x,
+                    commit_y
+                )) {
+                ggit_vector_push(&ui->select.selected_commits, &commit_i);
+            }
         }
     }
-    goto not_found;
-
-found:;
-    {
-        /* We found a commit that is starting to get dragged. */
-
-        int offset_x = 0;
-        int offset_y = 0;
-
-        ui->graph_x += offset_x;
-        ui->graph_y += offset_y;
-
-        /* TODO: draw the boxes. */
-
-        ui->graph_x -= offset_x;
-        ui->graph_y -= offset_y;
-    }
+    ui->select.start_x = -1;
+    ui->select.start_y = -1;
+    ui->action = nothing;
     return true;
-
-not_found:;
-    return false;
 }
 
+static bool
+ggit_ui_draw_overlay__commits_drop(
+    struct ggit_ui* ui,
+    struct ggit_input* input,
+    struct ggit_graph* graph
+)
+{
+    if (ui->action != dragging_commit)
+        return false;
+    if (ui->select.selected_commits.size == 0)
+        return false;
+
+    int const graph_x = ui->graph_x;
+    int const graph_y = ui->graph_y;
+    int const G_WIDTH = graph->width;
+    int const G_HEIGHT = graph->height;
+
+    int const SCREEN_W = ui->screen_w;
+    int const SCREEN_H = ui->screen_h;
+    int const ITEM_W = ui->item_w;
+    int const ITEM_H = ui->item_h;
+    int const BORDER = ui->border;
+    int const MARGIN_X = ui->margin_x;
+    int const MARGIN_Y = ui->margin_y;
+
+    int const ITEM_OUTER_W = ITEM_W + BORDER * 2;
+    int const ITEM_OUTER_H = ITEM_H + BORDER * 2;
+    int const ITEM_BOX_W = ITEM_OUTER_W + MARGIN_X * 2;
+    int const ITEM_BOX_H = ITEM_OUTER_H + MARGIN_Y * 2;
+
+    int const start_x = ui->select.start_x;
+    int const start_y = ui->select.start_y;
+    int const end_x = ui->select.end_x;
+    int const end_y = ui->select.end_y;
+
+    int const mx = input->mouse_x;
+    int const my = input->mouse_y;
+
+    /* TODO: change the HEAD to the 'drop' target. */
+
+    /* TODO: allocate an array and run the whole thing through ggit_git_cherry_pick. */
+    int error = 0;
+    for (int i = 0; i < ui->select.selected_commits.size; ++i) {
+        int commit_i = ggit_vector_get_int(&ui->select.selected_commits, i);
+
+        char const* hash = graph->hashes[commit_i];
+        error = ggit_git_cherry_pick(graph->path, 1, &hash);
+
+        /* TODO: return the HEAD to the original place. */
+        if (!error) {
+            ui->graph_y -= ITEM_BOX_H;
+        } else {
+            break;
+        }
+    }
+
+    ggit_vector_clear(&ui->select.selected_commits);
+    ggit_graph_reload(graph);
+
+    ui->action = nothing;
+    return !error;
+}
 static void
 ggit_ui_draw_overlay(
     struct ggit_ui* ui,
@@ -1091,103 +1329,13 @@ ggit_ui_draw_overlay(
     // Selections
     int const lmb = input->buttons[0];
     if (lmb & 1) {
-        ggit_ui_draw_overlay__drag_selection(ui, input, graph)
-            || ggit_ui_draw_overlay__create_selection(ui, input, graph);
-    } else if (ui->select.start_x >= 0) {
-        // End selection
-
-        int const graph_x = ui->graph_x;
-        int const graph_y = ui->graph_y;
-        int const G_WIDTH = graph->width;
-        int const G_HEIGHT = graph->height;
-
-        int const SCREEN_W = ui->screen_w;
-        int const SCREEN_H = ui->screen_h;
-        int const ITEM_W = ui->item_w;
-        int const ITEM_H = ui->item_h;
-        int const BORDER = ui->border;
-        int const MARGIN_X = ui->margin_x;
-        int const MARGIN_Y = ui->margin_y;
-
-        int const ITEM_OUTER_W = ITEM_W + BORDER * 2;
-        int const ITEM_OUTER_H = ITEM_H + BORDER * 2;
-        int const ITEM_BOX_W = ITEM_OUTER_W + MARGIN_X * 2;
-        int const ITEM_BOX_H = ITEM_OUTER_H + MARGIN_Y * 2;
-
-        int const start_x = ui->select.start_x;
-        int const start_y = ui->select.start_y;
-        int const end_x = ui->select.end_x;
-        int const end_y = ui->select.end_y;
-
-        ggit_vector_clear(&ui->select.selected_commits);
-        ui->select.active_commit = 0;
-        if (start_x == end_x && start_y == end_y) {
-            for (int i = G_HEIGHT - 1; i >= 0; --i) {
-                int const commit_i = G_HEIGHT - i - 1;
-                int const column = ggit_graph_commit_column(
-                    graph,
-                    &ui->cache.compressed_x,
-                    commit_i
-                );
-
-                int const commit_x_left = graph_x + MARGIN_X + BORDER
-                                          + ggit_graph_commit_x_left(ui, column);
-                int const commit_y_top = graph_y + MARGIN_Y + BORDER
-                                         + ggit_graph_commit_y_top(
-                                             ui,
-                                             commit_i,
-                                             G_HEIGHT
-                                         );
-                int const commit_x_right = commit_x_left + ITEM_W;
-                int const commit_y_bottom = commit_y_top + ITEM_H;
-
-                if (commit_y_bottom <= 0 || commit_y_top >= ui->screen_h)
-                    continue;
-
-                if (point_in_rect(
-                        commit_x_left,
-                        commit_y_top,
-                        commit_x_right,
-                        commit_y_bottom,
-                        start_x,
-                        start_y
-                    )) {
-                    ggit_vector_push(&ui->select.selected_commits, &commit_i);
-                }
-            }
-        } else {
-            for (int i = G_HEIGHT - 1; i >= 0; --i) {
-                int const commit_i = G_HEIGHT - i - 1;
-                int const column = ggit_graph_commit_column(
-                    graph,
-                    &ui->cache.compressed_x,
-                    commit_i
-                );
-
-                int const commit_x = graph_x + ggit_graph_commit_x_center(ui, column);
-                int const commit_y = graph_y
-                                     + ggit_graph_commit_y_center(
-                                         ui,
-                                         commit_i,
-                                         G_HEIGHT
-                                     );
-                if (commit_y < -ITEM_H || commit_y > ui->screen_h)
-                    continue;
-
-                if (point_in_rect(
-                        ui->select.start_x,
-                        ui->select.start_y,
-                        ui->select.end_x,
-                        ui->select.end_y,
-                        commit_x,
-                        commit_y
-                    )) {
-                    ggit_vector_push(&ui->select.selected_commits, &commit_i);
-                }
-            }
-        }
-        ui->select.start_x = -1;
-        ui->select.start_y = -1;
+        // Press+hold
+        ggit_ui_draw_overlay__commits_drag(ui, input, graph)
+            || ggit_ui_draw_overlay__selection_start(ui, input, graph);
+    } else if (lmb && (lmb % 2) == 0) {
+        // Release
+        ggit_ui_draw_overlay__commits_drop(ui, input, graph)
+            || ggit_ui_draw_overlay__selection_end(ui, input, graph);
     }
 }
 static void

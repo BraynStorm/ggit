@@ -31,6 +31,13 @@ struct ggit_ui
     SDL_Renderer* renderer;
     TTF_Font* font;
 
+    enum action
+    {
+        nothing,
+        dragging_selection,
+        dragging_commit,
+    } action;
+
     /* Selection */
     struct selection
     {

@@ -1,5 +1,6 @@
 #include "ggit-graph.h"
 #include "ggit-vector.h"
+#include "ggit-git.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -39,48 +40,6 @@ strndup(int length, char const* text)
 }
 
 
-static bool
-ggit_run(
-    char const* restrict command,
-    char** restrict out_stdout,
-    int* restrict out_stdout_length
-)
-{
-    struct ggit_vector buf_stdout = { 0 };
-    ggit_vector_init(&buf_stdout, sizeof(char));
-    ggit_vector_reserve(&buf_stdout, 4096);
-
-    FILE* pipe = _popen(command, "r");
-    if (!pipe)
-        return false;
-
-    while (true) {
-        char* begin = (char*)buf_stdout.data;
-        size_t read = fread(
-            begin + buf_stdout.size,
-            1,
-            buf_stdout.capacity - buf_stdout.size,
-            pipe
-        );
-        if (read == 0) {
-            /* NOTE(boz): Put the null terminator */
-            ggit_vector_push(&buf_stdout, &read);
-            break;
-        }
-        buf_stdout.size += (int)read;
-        if (buf_stdout.size == buf_stdout.capacity)
-            ggit_vector_reserve_more(&buf_stdout, buf_stdout.capacity);
-    }
-    fclose(pipe);
-
-    if (out_stdout)
-        *out_stdout = (char*)buf_stdout.data;
-    else
-        free(buf_stdout.data);
-    if (out_stdout_length)
-        *out_stdout_length = buf_stdout.size;
-    return true;
-}
 static int
 ggit_load_refs(
     int refs_len,
@@ -811,6 +770,7 @@ ggit_graph_reload(struct ggit_graph* graph)
     time_t start = time(0);
     time_t took;
 
+    /* TODO: expand path length */
     char cmd_load_commits[512];
     char cmd_load_refs[512];
     sprintf_s(
@@ -828,14 +788,14 @@ ggit_graph_reload(struct ggit_graph* graph)
 
     char* gitlog;
     int gitlog_len;
-    ggit_run(cmd_load_commits, &gitlog, &gitlog_len);
+    ggit_git_run(cmd_load_commits, &gitlog, &gitlog_len);
     took = time(0) - start;
     printf("ggit_graph_reload: Loading commits took %llds\n", took);
 
     start += took;
     char* refs;
     int refs_len;
-    ggit_run(cmd_load_refs, &refs, &refs_len);
+    ggit_git_run(cmd_load_refs, &refs, &refs_len);
     took = time(0) - start;
     printf("ggit_graph_reload: Loading branches took %llds\n", took);
 
