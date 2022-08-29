@@ -538,6 +538,9 @@ ggit_compute_column_spans(struct ggit_graph* graph)
         struct ggit_commit_tag tag = graph->tags[i];
         struct ggit_commit_parents parents = graph->parents[i];
 
+        if (tag.tag[0] == -1 || tag.tag[1] == -1)
+            continue;
+
         struct ggit_special_branch* sb = ggit_vector_ref_special_branch(
             &graph->special_branches,
             tag.tag[0]
