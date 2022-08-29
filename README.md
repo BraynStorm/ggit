@@ -1,13 +1,17 @@
+# GGit - Good/Great/GRAPHical/Grotesque GIT
+
+A git GUI that focuses on branches and columns.
+
 ## Tasks
 
-- [ ] TOP PRIORITY move the span-collision code (the static vector stuff) to ggit-vector.c/ggit_load_repository
+- [X] Move the span-collision code (the static vector stuff) to ggit-vector.c/ggit_load_repository
 - [ ] Allow compressing into other branches.
 - [x] Allow regex matching for special branches.
-- [ ] Draw lines in __style__.
+- [X] Draw lines in __style__.
 - [ ] Draw branches on-hover of columns.
 - [ ] Draw the HEAD commit in a distinctive way.
 - [ ] Draw the refs/stash commits in a distinctive way.
-- [ ] Make columns start-end-y dependant and compress the graph horizontally when a column is not used.
+- [X] Make columns start-end-y dependant and compress the graph horizontally when a column is not used.
 - [X] Add zoom in/out.
   - [ ] Use the cursor for the "center" of the zoom.
   - [ ] Zoom in the text (font-size) as well.
@@ -26,10 +30,10 @@
 - [ ] Add support for JIRA.
 
 ## Bugs
-- [ ] Branch bugfix/a is stemmed from bugfix/b but not from the head, rather, somewhere in the middle. But they don't collide
+- [X] Branch bugfix/a is stemmed from bugfix/b but not from the head, rather, somewhere in the middle. But they don't collide
     - [X] ... ??? That makes no sense, yet they are merged.
-    - [ ] Found it, we should go down first, to the level of the parent and then go left/right. Right now, the graph lines go left-right first and then go down to the parent.
-    - [ ] Spans are overlapping but merged, why?
+    - [X] Found it, we should go down first, to the level of the parent and then go left/right. Right now, the graph lines go left-right first and then go down to the parent.
+    - [X] Spans are overlapping but merged, why?
 - [ ] Feature stemming from another feature extends the span of the parent.
     - [ ] Probably just have to check if the commit has > 1 parent, and only then extend the parent's span.
-- [ ] Touchpad support is very broken.
+- [X] Touchpad support is very broken.
