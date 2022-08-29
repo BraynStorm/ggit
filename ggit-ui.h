@@ -8,6 +8,12 @@
 
 #include <assert.h>
 
+struct ggit_size
+{
+    int w;
+    int h;
+};
+
 struct ggit_ui
 {
     int screen_w;
@@ -32,6 +38,7 @@ struct ggit_ui
         int start_y;
         int end_x;
         int end_y;
+        int active_commit;
         struct ggit_vector selected_commits;
     } select;
 
@@ -90,8 +97,7 @@ void ggit_ui_draw_text(
     char const* text,
     int x,
     int y,
-    int* text_w,
-    int* text_h
+    struct ggit_size* out_opt_size
 );
 
 /*
@@ -114,12 +120,7 @@ int ggit_ui_button(
     UTILS
 ===============
 */
-struct ggit_size
-{
-    int w;
-    int h;
-};
-struct ggit_size ggit_ui_draw_text(
+struct ggit_size ggit_ui_size_text(
     SDL_Renderer* renderer,
     TTF_Font* font,
     char const* text
@@ -127,8 +128,16 @@ struct ggit_size ggit_ui_draw_text(
 static inline bool
 point_in_rect(int x0, int y0, int x1, int y1, int mx, int my)
 {
-    assert(x0 <= x1);
-    assert(y0 <= y1);
+    if (x0 > x1) {
+        int xt = x0;
+        x0 = x1;
+        x1 = xt;
+    }
+    if (y0 > y1) {
+        int yt = y0;
+        y0 = y1;
+        y1 = yt;
+    }
 
     return mx >= x0 && mx <= x1 && my >= y0 && my <= y1;
 }

@@ -122,16 +122,12 @@ ggit_ui_draw_text(
     char const* text,
     int x,
     int y,
-    int* text_w,
-    int* text_h
+    struct ggit_size* out_opt_size
 )
 {
-    int text_w_dummy;
-    if (!text_w)
-        text_w = &text_w_dummy;
-    int text_h_dummy;
-    if (!text_h)
-        text_h = &text_h_dummy;
+    struct ggit_size size;
+    if (!out_opt_size)
+        out_opt_size = &size;
 
     SDL_Surface* text_surface = TTF_RenderUTF8_LCD(
         font,
@@ -140,7 +136,7 @@ ggit_ui_draw_text(
         (SDL_Color){ 220, 220, 220, 0xFF }
     );
     SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, text_surface);
-    TTF_SizeUTF8(font, text, text_w, text_h);
+    TTF_SizeUTF8(font, text, &out_opt_size->w, &out_opt_size->h);
     SDL_RenderCopy(
         renderer,
         texture,
@@ -148,8 +144,8 @@ ggit_ui_draw_text(
         &(SDL_Rect){
             .x = x,
             .y = y,
-            .w = *text_w,
-            .h = *text_h,
+            .w = out_opt_size->w,
+            .h = out_opt_size->h,
         }
     );
     SDL_DestroyTexture(texture);
@@ -166,15 +162,14 @@ ggit_ui_button(
     unsigned color[4]
 )
 {
-    int text_w;
-    int text_h;
-    ggit_ui_draw_text(ui->renderer, ui->font, text, x, y, &text_w, &text_h);
+    struct ggit_size size;
+    ggit_ui_draw_text(ui->renderer, ui->font, text, x, y, &size);
 
     bool hovered = point_in_rect(
         x,
         y,
-        x + text_w,
-        y + text_h,
+        x + size.w,
+        y + size.h,
         input->mouse_x,
         input->mouse_y
     );
@@ -183,11 +178,10 @@ ggit_ui_button(
     return hovered && lmb && !(lmb & 1);
 }
 
-
-struct ggit_size ggit_ui_draw_text(
-    SDL_Renderer* renderer,
-    TTF_Font* font,
-    char const* text
-){
-    
+struct ggit_size
+ggit_ui_size_text(SDL_Renderer* renderer, TTF_Font* font, char const* text)
+{
+    struct ggit_size size;
+    TTF_SizeUTF8(font, text, &size.w, &size.h);
+    return size;
 }
