@@ -6,6 +6,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <assert.h>
+
 
 int
 ggit_git_run(
@@ -51,24 +53,33 @@ ggit_git_run(
     return exit_code;
 }
 
-
-void
-ggit_vector_push_string(struct ggit_vector* vector, char const* string)
-{
-    char c;
-    int length = strlen(string);
-    int vector_size = vector->size;
-
-    ggit_vector_reserve_more(vector, length + 1);
-    memcpy((char*)vector->data + vector_size, string, length);
-    vector->size = vector_size + length;
-}
-
 int
-ggit_git_checkout(char const* restrict repository_path, char const* restrict branch)
+ggit_git_checkout_branch(
+    char const* restrict repository_path,
+    char const* restrict branch_name
+)
 {
-    return 0;
+    struct ggit_vector cmd;
+    ggit_vector_init(&cmd, sizeof(char));
+    ggit_vector_reserve(&cmd, 256);
+    ggit_vector_push_sprintf_terminated(
+        &cmd,
+        "git -C \"%s\" branch %s",
+        repository_path,
+        branch_name
+    );
+
+    char* output;
+    int n_output;
+    int status = ggit_git_run(cmd.data, &output, &n_output);
+    ggit_vector_destroy(&cmd);
+
+    free(output);
+
+    return status;
 }
+
+
 int
 ggit_git_cherry_pick(
     char const* restrict repository_path,
@@ -82,9 +93,7 @@ ggit_git_cherry_pick(
     struct ggit_vector cmd;
     ggit_vector_init(&cmd, sizeof(char));
     ggit_vector_reserve(&cmd, 256 + 40 * n_commits);
-    ggit_vector_push_string(&cmd, "git -C \"");
-    ggit_vector_push_string(&cmd, repository_path);
-    ggit_vector_push_string(&cmd, "\" cherry-pick ");
+    ggit_vector_push_sprintf(&cmd, "git -C \"%s\" cherry-pick ", repository_path);
     for (int i = 0; i < n_commits; ++i) {
         ggit_vector_push_string(&cmd, commit_hashes[i]);
         ggit_vector_push(&cmd, &space);
@@ -97,5 +106,37 @@ ggit_git_cherry_pick(
     ggit_vector_destroy(&cmd);
 
     free(output);
+    return status;
+}
+
+int
+ggit_git_status(char const* restrict repository_path, struct ggit_vector* out_vec)
+{
+    struct ggit_vector cmd;
+    ggit_vector_init(&cmd, sizeof(char));
+    ggit_vector_reserve(&cmd, 256);
+    ggit_vector_push_sprintf_terminated(
+        &cmd,
+        "git -C \"%s\" status -s -b",
+        repository_path
+    );
+
+    char* output;
+    int n_output;
+    int status = ggit_git_run(cmd.data, &output, &n_output);
+    ggit_vector_destroy(&cmd);
+
+    /* TODO: parse the output: git status -b -s:
+## feature/ui/cherry-pick
+MM ggit-git.c
+ M ggit-git.h
+ M ggit-graph.h
+ M ggit-vector.c
+ M ggit-vector.h
+ M ggit.c
+    */
+
+    free(output);
+
     return status;
 }

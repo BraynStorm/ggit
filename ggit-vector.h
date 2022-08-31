@@ -19,6 +19,19 @@ void  ggit_vector_clear       (struct ggit_vector* vec);
 void  ggit_vector_clear_and_free(struct ggit_vector* vec);
 void  ggit_vector_insert      (struct ggit_vector* vec, int index, void const* value);
 void  ggit_vector_push        (struct ggit_vector* vec, void const* value);
+/* Does NOT add a \0 at the end. Push it manually if needed. */
+void  ggit_vector_push_string (struct ggit_vector* vec, char const*);
+/* `sprintf()` to struct `ggit_vector`. Auto-pushes a NULL.
+Supports:
+    - `%%` -> Literal '%'
+    - `%s` -> char const*
+
+*/
+void  ggit_vector_push_sprintf(struct ggit_vector* vec, char const* format, ...) __attribute__((format (printf, 2, 3)));
+void  ggit_vector_push_vsprintf(struct ggit_vector* vec, char const* format, va_list args);
+void  ggit_vector_push_sprintf_terminated(struct ggit_vector* vec, char const* format, ...)
+__attribute__ ((format (printf, 2, 3)))
+;
 void  ggit_vector_reserve     (struct ggit_vector* vec, int at_least);
 void  ggit_vector_reserve_more(struct ggit_vector* vec, int more);
 void* ggit_vector_get         (struct ggit_vector* vec, int index);
