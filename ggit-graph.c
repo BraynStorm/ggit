@@ -700,6 +700,8 @@ ggit_graph_init(struct ggit_graph* graph)
 {
     memset(graph, 0, sizeof(*graph));
 
+    ggit_git_init(&graph->git);
+
     ggit_vector_init(&graph->special_branches, sizeof(struct ggit_special_branch));
 
     ggit_vector_init(&graph->ref_names, sizeof(char*));
@@ -740,6 +742,7 @@ void
 ggit_graph_destroy(struct ggit_graph* graph)
 {
     free(graph->path);
+    ggit_git_destroy(&graph->git);
     ggit_graph_clear(graph);
 
     for (int i = 0; i < graph->special_branches.size; ++i) {
@@ -764,50 +767,75 @@ ggit_graph_load(struct ggit_graph* graph, char const* path_repository)
     return 0;
 }
 
+/* Moves all data from the old vector to the new vector, zeroing the input vector(old).
+ */
+struct ggit_vector
+ggit_vector_copy(struct ggit_vector* in)
+{
+    int const value_size = in->value_size;
+    int const size = in->size;
+    struct ggit_vector new = { .value_size = value_size };
+    ggit_vector_push_array(&new, size, in->data);
+    return new;
+}
+
 int
 ggit_graph_reload(struct ggit_graph* graph)
 {
+    struct ggit_git* ggg = &graph->git;
+
     time_t start = time(0);
-    time_t took;
+    time_t end = 0;
+    time_t took = 0;
 
-    /* TODO: expand path length */
-    char cmd_load_commits[512];
-    char cmd_load_refs[512];
-    sprintf_s(
-        cmd_load_commits,
-        sizeof(cmd_load_commits),
-        "git -C \"%s\" log --reverse --all --pretty=format:\"%%h|%%p|%%s\"",
-        graph->path
+    int status_commits;
+    int status_refs;
+    struct ggit_vector git_out_commits;
+    struct ggit_vector git_out_refs;
+    {
+        ggit_git_clear(ggg);
+        ggit_vector_push_sprintf_terminated(
+            &ggg->command,
+            "git -C \"%s\" log --reverse --all --pretty=format:\"%%h|%%p|%%s\"",
+            graph->path
+        );
+        status_commits = ggit_git_run(ggg);
+        git_out_commits = ggit_vector_copy(&ggg->out);
+
+        end = time(0);
+        took = end - start;
+        start = end;
+        printf("ggit_graph_reload: Loading commits took %llds\n", took);
+    }
+    {
+        ggit_git_clear(ggg);
+        ggit_vector_push_sprintf_terminated(
+            &ggg->command,
+            "git -C \"%s\" show-ref",
+            graph->path
+        );
+        status_refs = ggit_git_run(ggg);
+        git_out_refs = ggit_vector_copy(&ggg->out);
+
+        end = time(0);
+        took = end - start;
+        start = end;
+        printf("ggit_graph_reload: Loading branches took %llds\n", took);
+    }
+    ggit_graph_load_repository(
+        git_out_commits.size,
+        git_out_commits.data,
+        git_out_refs.size,
+        git_out_refs.data,
+        graph
     );
-    sprintf_s(
-        cmd_load_refs,
-        sizeof(cmd_load_refs),
-        "git -C \"%s\" show-ref",
-        graph->path
-    );
-
-    char* gitlog;
-    int gitlog_len;
-    ggit_git_run(cmd_load_commits, &gitlog, &gitlog_len);
-    took = time(0) - start;
-    printf("ggit_graph_reload: Loading commits took %llds\n", took);
-
-    start += took;
-    char* refs;
-    int refs_len;
-    ggit_git_run(cmd_load_refs, &refs, &refs_len);
-    took = time(0) - start;
-    printf("ggit_graph_reload: Loading branches took %llds\n", took);
-
-
-    start += took;
-    ggit_graph_load_repository(gitlog_len, gitlog, refs_len, refs, graph);
-    took = time(0) - start;
+    end = time(0);
+    took = end - start;
+    start = end;
     printf("ggit_graph_reload: Parsing took %llds\n", took);
 
-    free(refs);
-    free(gitlog);
-
+    ggit_vector_destroy(&git_out_refs);
+    ggit_vector_destroy(&git_out_commits);
     return 0;
 }
 

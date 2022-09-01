@@ -22,6 +22,13 @@ add_executable(
     ggit-git.c
     deps/small-regex/libsmallregex/libsmallregex.c
 )
+if(WIN32) 
+    target_sources(
+        ggit
+        PRIVATE
+        ggit-git-win32.c
+    )
+endif()
 target_link_libraries(ggit SDL2 SDL2main SDL2_ttf)
 
 file(

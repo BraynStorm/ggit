@@ -1,5 +1,6 @@
 #pragma once
 
+#include "ggit-git.h"
 #include "ggit-vector.h"
 
 #include <libsmallregex.h>
@@ -78,18 +79,22 @@ struct ggit_graph
     int height;
 
     char* path;
+    struct ggit_git git;
 
     int* message_lengths;
     char** messages;
     char** hashes;
     struct ggit_commit_parents* parents;
     struct ggit_commit_tag* tags;
+    int head_commit_i;
+    char* current_branch_name;
 
     struct ggit_vector special_branches;
 
     struct ggit_vector ref_names;
     struct ggit_vector ref_hashes;
     struct ggit_vector ref_commits;
+
 };
 
 // clang-format align

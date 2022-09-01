@@ -114,14 +114,24 @@ ggit_vector_push(struct ggit_vector* vec, void const* value)
     ggit_vector_insert(vec, vec->size, value);
 }
 void
+ggit_vector_push_array(struct ggit_vector* vec, int n_values, void const* values)
+{
+    int const value_size = vec->value_size;
+    int const vec_size = vec->size;
+
+    assert(value_size > 0);
+    assert(n_values >= 0);
+    assert(values != NULL);
+
+    ggit_vector_reserve_more(vec, n_values);
+
+    memcpy((char*)vec->data + vec_size * value_size, values, n_values * value_size);
+    vec->size = vec_size + n_values;
+}
+void
 ggit_vector_push_string(struct ggit_vector* vec, char const* str)
 {
-    int length = strlen(str);
-    int vector_size = vec->size;
-
-    ggit_vector_reserve(vec, length + 1);
-    memcpy((char*)vec->data + vector_size, str, length);
-    vec->size = vector_size + length;
+    ggit_vector_push_array(vec, strlen(str), str);
 }
 void
 ggit_vector_push_sprintf(struct ggit_vector* vec, char const* format, ...)
@@ -136,63 +146,43 @@ ggit_vector_push_vsprintf(struct ggit_vector* vec, char const* format, va_list a
 {
     assert(vec->value_size == sizeof(char));
 
-    int i;
+    int i = 0;
     int last_replacement = 0;
 
-    for (i = 0; format[i]; ++i) {
+    for (; format[i]; ++i) {
         char c = format[i];
 
         switch (c) {
             case '%': {
-                {
-                    int const distance = i - last_replacement;
-                    ggit_vector_reserve(vec, distance + 1);
-                    memcpy(
-                        (char*)vec->data + vec->size * sizeof(char),
-                        format + last_replacement,
-                        distance * sizeof(char)
-                    );
-                    vec->size += distance;
-                }
+                // Push the 'skipped' part of `format`.
+                ggit_vector_push_array(
+                    vec,
+                    i - last_replacement,
+                    format + last_replacement
+                );
 
+                // Get the next char.
                 c = format[++i];
 
                 switch (c) {
                     case '%': ggit_vector_push(vec, &c); break;
-                    case 's': {
-                        char const* chars = va_arg(args, char const*);
-                        int const n_chars = strlen(chars);
-                        ggit_vector_reserve(vec, n_chars + 1);
-                        memcpy(
-                            (char*)vec->data + vec->size * sizeof(char),
-                            chars,
-                            n_chars * sizeof(char)
-                        );
-                        vec->size += n_chars;
-                    } break;
+                    case 's':
+                        ggit_vector_push_string(vec, va_arg(args, char const*));
+                        break;
                 }
                 last_replacement = i + 1;
             } break;
         }
     }
 
-    int const distance = i - last_replacement;
-    if (distance) {
-        ggit_vector_reserve_more(vec, distance + 1);
-        memcpy(
-            (char*)vec->data + vec->size * sizeof(char),
-            format + last_replacement,
-            distance * sizeof(char)
-        );
-        vec->size += distance;
-    }
+    ggit_vector_push_string(vec, format + last_replacement);
 }
 void
 ggit_vector_push_sprintf_terminated(struct ggit_vector* vec, char const* format, ...)
 {
     va_list va;
     va_start(va, format);
-    ggit_vector_push_sprintf(vec, format, va);
+    ggit_vector_push_vsprintf(vec, format, va);
     va_end(va);
 
     char null = 0;
@@ -208,7 +198,7 @@ ggit_vector_reserve(struct ggit_vector* vec, int at_least)
 void
 ggit_vector_reserve_more(struct ggit_vector* vec, int more)
 {
-    more -= vec->size;
+    more += vec->size;
     ggit_vector_reserve(vec, more);
 }
 void*
