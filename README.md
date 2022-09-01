@@ -2,6 +2,12 @@
 
 A git GUI that focuses on branches and columns.
 
+## Tests
+
+- [ ] Unit tests
+  - [ ] Git
+- [ ] UI
+
 ## Tasks
 
 - [X] Move the span-collision code (the static vector stuff) to ggit-vector.c/ggit_load_repository
@@ -13,17 +19,19 @@ A git GUI that focuses on branches and columns.
 - [ ] Draw the refs/stash commits in a distinctive way.
 - [X] Make columns start-end-y dependant and compress the graph horizontally when a column is not used.
 - [X] Add zoom in/out.
-  - [ ] Use the cursor for the "center" of the zoom.
-  - [ ] Zoom in the text (font-size) as well.
+    - [ ] Use the cursor for the "center" of the zoom.
+    - [ ] Zoom in the text (font-size) as well.
 - [ ] Add configurable branches/colors/order.
 - [ ] Add custom filtering (by author, by date, range of commits, etc...).
 - [ ] Add clickable GUI
     - [ ] Add "Checkout" - double-click on a head-of-branch commit.
     - [ ] Add "Create branch" - ???
     - [ ] Add "Delete branch"
-    - [ ] Add "Rebase" - drag-and-drop a commit.
-        - [ ] Holding CTRL does a cherry-pick instead.
-            - [ ] Add "Merge"    - right-click-and-drag from the 'kink' to the 'main'.
+    - [ ] Add "Rebase" - drag-and-drop a branch.
+    - [ ] Add "Cherry-pick" - drag-and-drop a commit (or selection)
+        - [ ] Drop location is not a local branch?
+            - [ ] Ask the user to create a new one
+    - [ ] Add "Merge"    - right-click-and-drag from the 'kink' to the 'main'.
 - [ ] Add auto-reloading.
 - [ ] Add support for git tags.
 - [ ] Add support for Jenkins.
