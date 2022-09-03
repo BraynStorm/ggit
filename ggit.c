@@ -11,6 +11,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <assert.h>
+#include <time.h>
 
 #include "ggit-vector.h"
 #include "ggit-graph.h"
@@ -23,6 +24,8 @@
 #include <Windows.h>
 
 #define ARRAY_COUNT(array) ARRAYSIZE(array)
+
+unsigned long long PERF_FREQ;
 
 struct compressed_x
 {
@@ -77,8 +80,18 @@ spans_join(
     inout->merge_min = min(inout->merge_min, in->merge_min);
     inout->merge_max = max(inout->merge_max, in->merge_max);
 }
+
 static int
 ggit_graph_commit_column(
+    struct ggit_graph* graph,
+    struct ggit_vector* compressed_x,
+    int commit_index
+)
+{
+    return ggit_vector_get_int(compressed_x, commit_index);
+}
+static int
+ggit_graph_commit_column_slow(
     struct ggit_graph* graph,
     struct ggit_vector* compressed_x,
     int commit_index
@@ -214,7 +227,7 @@ ggit_graph_commit_y_center(struct ggit_ui* ui, int commit_index, int graph_heigh
     return commit_y_center;
 }
 
-static void
+__attribute__((noinline)) static void
 ggit_ui_draw_graph__connections(
     struct ggit_ui* ui,
     struct ggit_graph* graph,
@@ -241,6 +254,10 @@ ggit_ui_draw_graph__connections(
     int const ITEM_OUTER_W = ITEM_H + BORDER * 2;
     int const ITEM_BOX_H = ITEM_OUTER_W + MARGIN_X * 2;
     int const ITEM_BOX_W = ITEM_OUTER_H + MARGIN_Y * 2;
+
+    struct ggit_vector points;
+    ggit_vector_init(&points, sizeof(SDL_Point));
+    ggit_vector_reserve(&points, 32);
 
     SDL_SetRenderDrawColor(renderer, 0xAA, 0xAA, 0xAA, 0xFF);
     for (int i = i_from; i < i_to; ++i) {
@@ -272,6 +289,7 @@ ggit_ui_draw_graph__connections(
             int parent = graph->parents[commit_i].parent[j];
             if (parent == -1)
                 break;
+
             int const parent_column = ggit_graph_commit_column(
                 graph,
                 compressed_x,
@@ -294,7 +312,6 @@ ggit_ui_draw_graph__connections(
                 if (j) {
                     // This is the "secondary" parent - the merged-in branch.
                     assert(j == 1);
-                    SDL_SetRenderDrawColor(ui->renderer, 0xAA, 0xAA, 0xAA, 0xFF);
                     ggit_ui_draw_arc(
                         ui->renderer,
                         parent_x_center + arc_radius * direction,
@@ -305,6 +322,34 @@ ggit_ui_draw_graph__connections(
                     );
 
                     // Middle - left/right to match parent column
+                    // ggit_vector_push(
+                    //     &points,
+                    //     &(SDL_Point){
+                    //         commit_x_center,
+                    //         commit_y_center,
+                    //     }
+                    // );
+                    // ggit_vector_push(
+                    //     &points,
+                    //     &(SDL_Point){
+                    //         parent_x_center + arc_radius * direction,
+                    //         commit_y_center,
+                    //     }
+                    // );
+                    // ggit_vector_push(
+                    //     &points,
+                    //     &(SDL_Point){
+                    //         parent_x_center,
+                    //         commit_y + arc_radius,
+                    //     }
+                    // );
+                    // ggit_vector_push(
+                    //     &points,
+                    //     &(SDL_Point){
+                    //         parent_x_center,
+                    //         parent_y_center,
+                    //     }
+                    // );
                     SDL_RenderDrawLine(
                         renderer,
                         commit_x_center,
@@ -323,7 +368,6 @@ ggit_ui_draw_graph__connections(
                     );
                 } else {
                     // Primary parent (the master-er branch)
-                    SDL_SetRenderDrawColor(ui->renderer, 0xAA, 0xAA, 0xAA, 0xFF);
                     ggit_ui_draw_arc(
                         ui->renderer,
                         commit_x_center - arc_radius * direction,
@@ -342,6 +386,20 @@ ggit_ui_draw_graph__connections(
                     );
 
                     // Middle - left/right to match parent column
+                    // ggit_vector_push(
+                    //     &points,
+                    //     &(SDL_Point){
+                    //         commit_x_center - arc_radius * direction,
+                    //         parent_y_top,
+                    //     }
+                    // );
+                    // ggit_vector_push(
+                    //     &points,
+                    //     &(SDL_Point){
+                    //         parent_x_center + arc_radius * direction,
+                    //         parent_y_top,
+                    //     }
+                    // );
                     SDL_RenderDrawLine(
                         renderer,
                         commit_x_center - arc_radius * direction,
@@ -349,7 +407,23 @@ ggit_ui_draw_graph__connections(
                         parent_x_center + arc_radius * direction,
                         parent_y_top
                     );
+
+
                     // Middle - down to match parent top
+                    // ggit_vector_push(
+                    //     &points,
+                    //     &(SDL_Point){
+                    //         commit_x_center,
+                    //         commit_y,
+                    //     }
+                    // );
+                    // ggit_vector_push(
+                    //     &points,
+                    //     &(SDL_Point){
+                    //         commit_x_center,
+                    //         parent_y_top - arc_radius,
+                    //     }
+                    // );
                     SDL_RenderDrawLine(
                         renderer,
                         commit_x_center,
@@ -361,6 +435,51 @@ ggit_ui_draw_graph__connections(
             } else {
                 // Commit - center to bottom
                 int const offset_merge = is_merge * -2;
+
+
+                // ggit_vector_push(
+                //     &points,
+                //     &(SDL_Point){
+                //         commit_x_center,
+                //         commit_y_bottom + offset_merge,
+                //     }
+                // );
+                // ggit_vector_push(
+                //     &points,
+                //     &(SDL_Point){
+                //         commit_x_center,
+                //         commit_y,
+                //     }
+                // );
+                // ggit_vector_push(
+                //     &points,
+                //     &(SDL_Point){
+                //         commit_x_center,
+                //         commit_y_bottom + offset_merge,
+                //     }
+                // );
+                // ggit_vector_push(
+                //     &points,
+                //     &(SDL_Point){
+                //         commit_x_center,
+                //         parent_y_top,
+                //     }
+                // );
+                // ggit_vector_push(
+                //     &points,
+                //     &(SDL_Point){
+                //         parent_x_center,
+                //         parent_y_top,
+                //     }
+                // );
+                // ggit_vector_push(
+                //     &points,
+                //     &(SDL_Point){
+                //         parent_x_center,
+                //         parent_y_top + MARGIN_Y,
+                //     }
+                // );
+
                 SDL_RenderDrawLine(
                     renderer,
                     commit_x_center,
@@ -386,10 +505,16 @@ ggit_ui_draw_graph__connections(
                 );
             }
         }
+
+        SDL_RenderDrawLines(renderer, points.data, points.size);
+        // SDL_RenderGeo
+        ggit_vector_clear(&points);
     }
+
+    ggit_vector_destroy(&points);
 }
 
-static void
+__attribute__((noinline)) static void
 ggit_ui_draw_graph__spans(
     struct ggit_ui* ui,
     struct ggit_graph* graph,
@@ -417,7 +542,6 @@ ggit_ui_draw_graph__spans(
     int const ITEM_BOX_H = ITEM_OUTER_H + MARGIN_Y * 2;
 
     int n_hovered = 0;
-    // puts("\nHovered:");
 
     for (int i = i_from; i < i_to; ++i) {
         int const commit_i = G_HEIGHT - 1 - i;
@@ -487,13 +611,9 @@ ggit_ui_draw_graph__spans(
             );
         }
     }
-    if (n_hovered) {
-        /* TODO: uncomment this */
-        // assert(n_hovered <= 1);
-    }
 }
 
-static void
+__attribute__((noinline)) static void
 ggit_ui_draw_graph__commit_messages(
     struct ggit_ui* ui,
     struct ggit_graph* graph,
@@ -537,7 +657,8 @@ ggit_ui_draw_graph__commit_messages(
         ggit_ui_draw_text(renderer, font, message, text_x, commit_y, 0);
     }
 }
-static void
+
+__attribute__((noinline)) static void
 ggit_ui_draw_graph__refs(
     struct ggit_ui* ui,
     struct ggit_graph* graph,
@@ -608,7 +729,8 @@ ggit_ui_draw_graph__refs(
         SDL_RenderDrawLine(renderer, 0, commit_y_center, commit_x, commit_y_center);
     }
 }
-static void
+
+__attribute__((noinline)) static void
 ggit_ui_draw_graph__boxes(
     struct ggit_ui* ui,
     struct ggit_graph* graph,
@@ -701,43 +823,55 @@ ggit_ui_draw_graph__boxes(
         );
     }
 }
-static int
+__attribute__((noinline)) static int
 ggit_ui_graph__generate_compressed_x(
     struct ggit_graph* graph,
     int i_from,
     int i_to,
-    struct ggit_vector* compressed_x
+    struct ggit_vector* cache_x
 )
 {
     int const g_width = graph->width;
     int const g_height = graph->height;
 
-    if (compressed_x->data)
-        ggit_vector_destroy(compressed_x);
+    ggit_vector_clear(cache_x);
+    if (!cache_x->value_size)
+        cache_x->value_size = sizeof(int);
+    ggit_vector_reserve(cache_x, g_height);
+    cache_x->size = g_height;
 
-    ggit_vector_init(compressed_x, sizeof(struct compressed_x));
+    static struct ggit_vector compressed_x;
+    if (!compressed_x.value_size)
+        ggit_vector_init(&compressed_x, sizeof(struct compressed_x));
+    ggit_vector_reserve(&compressed_x, g_width);
+    compressed_x.size = g_width;
 
-    ggit_vector_reserve(compressed_x, g_width);
-    memset(compressed_x->data, 0, compressed_x->capacity * compressed_x->value_size);
-    compressed_x->size = g_width;
     for (int i = i_from; i < i_to; ++i) {
         int const commit_i = g_height - 1 - i;
-        int x = ggit_graph_commit_column(graph, 0, commit_i);
-
-        ggit_vector_ref_compressed_x(compressed_x, x)->taken = true;
+        int x = ggit_graph_commit_column_slow(graph, 0, commit_i);
+        *ggit_vector_ref_int(cache_x, commit_i) = x;
+        ggit_vector_ref_compressed_x(&compressed_x, x)->taken = true;
     }
 
     int counter = 0;
     for (int i = 0; i < g_width; ++i) {
-        struct compressed_x* cx = ggit_vector_ref_compressed_x(compressed_x, i);
+        struct compressed_x* cx = ggit_vector_ref_compressed_x(&compressed_x, i);
         if (cx->taken) {
             cx->new_x = counter++;
         }
     }
+
+    for (int i = i_from; i < i_to; ++i) {
+        int const commit_i = g_height - 1 - i;
+        int const cached_x = ggit_vector_get_int(cache_x, commit_i);
+        int const new_x = ggit_vector_ref_compressed_x(&compressed_x, cached_x)->new_x;
+        *ggit_vector_ref_int(cache_x, commit_i) = new_x;
+    }
+
     return counter;
 }
 
-static void
+__attribute__((noinline)) static void
 ggit_ui_draw_graph(
     struct ggit_ui* ui,
     struct ggit_input* input,
@@ -747,16 +881,19 @@ ggit_ui_draw_graph(
     SDL_Renderer* const renderer = ui->renderer;
     TTF_Font* const font = ui->font;
 
+    int const i_min = 0;
     int const i_max = min(graph->height, 15000000);
+
     int* compressed_width = &ui->cache.compressed_width;
     // Compress X
-    struct ggit_vector* compressed_x = &ui->cache.compressed_x;
-    if (compressed_x->size != graph->width) {
+    struct ggit_vector* cache_x = &ui->cache.commit_x;
+    if (cache_x->size != graph->height) {
+        /* TODO: also update this on "filter-change". */
         *compressed_width = ggit_ui_graph__generate_compressed_x(
             graph,
-            0,
+            i_min,
             i_max,
-            compressed_x
+            cache_x
         );
     }
 
@@ -765,49 +902,30 @@ ggit_ui_draw_graph(
         ui,
         graph,
         input,
-        0,
+        i_min,
         i_max,
         *compressed_width,
-        compressed_x
+        cache_x
     );
 
     // Draw spans (debug)
-    ggit_ui_draw_graph__spans(ui, graph, input, 0, i_max, compressed_x);
+    ggit_ui_draw_graph__spans(ui, graph, input, i_min, i_max, cache_x);
 
     // Draw connections
-    ggit_ui_draw_graph__connections(ui, graph, 0, i_max, compressed_x);
+    ggit_ui_draw_graph__connections(ui, graph, i_min, i_max, cache_x);
 
     // Draw commit messages
     ggit_ui_draw_graph__commit_messages(
         ui,
         graph,
-        0,
+        i_min,
         i_max,
         *compressed_width,
-        compressed_x
-    );
-
-    // Draw the crosshair
-    SDL_SetRenderDrawColor(renderer, 0x22, 0x22, 0x22, 0xFF);
-    SDL_RenderDrawLines(
-        renderer,
-        (SDL_Point[]){
-            { 0, input->mouse_y },
-            { 1920, input->mouse_y },
-        },
-        2
-    );
-    SDL_RenderDrawLines(
-        renderer,
-        (SDL_Point[]){
-            { input->mouse_x, 0 },
-            { input->mouse_x, 1080 },
-        },
-        2
+        cache_x
     );
 
     // Draw the blocks.
-    ggit_ui_draw_graph__boxes(ui, graph, 0, i_max, compressed_x);
+    ggit_ui_draw_graph__boxes(ui, graph, 0, i_max, cache_x);
 }
 
 static bool
@@ -880,7 +998,7 @@ find_commit_at_point(
 
         int const commit_column = ggit_graph_commit_column(
             graph,
-            &ui->cache.compressed_x,
+            &ui->cache.commit_x,
             commit_i
         );
         int const commit_x_left_src = ggit_graph_commit_x_left(ui, commit_column);
@@ -955,7 +1073,7 @@ ggit_ui_draw_overlay__commits_drag(
         int const commit_i = ggit_vector_get_int(&ui->select.selected_commits, i);
         int const commit_column = ggit_graph_commit_column(
             graph,
-            &ui->cache.compressed_x,
+            &ui->cache.commit_x,
             commit_i
         );
         int const commit_x_left_src = ggit_graph_commit_x_left(ui, commit_column);
@@ -1055,7 +1173,7 @@ ggit_ui_draw_overlay__selection_end(
             int const commit_i = G_HEIGHT - i - 1;
             int const column = ggit_graph_commit_column(
                 graph,
-                &ui->cache.compressed_x,
+                &ui->cache.commit_x,
                 commit_i
             );
 
@@ -1085,7 +1203,7 @@ ggit_ui_draw_overlay__selection_end(
             int const commit_i = G_HEIGHT - i - 1;
             int const column = ggit_graph_commit_column(
                 graph,
-                &ui->cache.compressed_x,
+                &ui->cache.commit_x,
                 commit_i
             );
 
@@ -1159,7 +1277,7 @@ ggit_ui_draw_overlay__commits_drop(
         int commit_i = ggit_vector_get_int(&ui->select.selected_commits, i);
 
         char const* hash = graph->hashes[commit_i];
-        error = ggit_git_cherry_pick(graph->path, 1, &hash);
+        error = ggit_git_cherry_pick(&graph->git, graph->path, 1, &hash);
 
         /* TODO: return the HEAD to the original place. */
         if (!error) {
@@ -1214,26 +1332,48 @@ ggit_ui_input(struct ggit_ui* ui, struct ggit_input* input, struct ggit_graph* g
     }
 }
 
+unsigned long long
+Now()
+{
+    LARGE_INTEGER li;
+    QueryPerformanceCounter(&li);
+    return li.QuadPart;
+}
+
+
 int
 main(int argc, char** argv)
 {
+    {
+        LARGE_INTEGER li;
+        QueryPerformanceFrequency(&li);
+        PERF_FREQ = li.QuadPart;
+    }
+
+
     struct ggit_input input = { 0 };
     struct ggit_ui ui = { 0 };
+
 
     if (!ui.select.selected_commits.value_size)
         ggit_vector_init(&ui.select.selected_commits, sizeof(int));
 
     SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS);
     TTF_Init();
-    SDL_Window* window;
-    SDL_Renderer* renderer;
-    SDL_CreateWindowAndRenderer(
+    SDL_Window* window = SDL_CreateWindow(
+        "GGit",
+        SDL_WINDOWPOS_CENTERED,
+        SDL_WINDOWPOS_CENTERED,
         1280,
         720,
-        SDL_WINDOW_RESIZABLE | SDL_WINDOW_MOUSE_FOCUS,
-        &window,
-        &renderer
+        SDL_WINDOW_RESIZABLE | SDL_WINDOW_MOUSE_FOCUS
     );
+    SDL_Renderer* renderer = SDL_CreateRenderer(
+        window,
+        -1,
+        SDL_RENDERER_ACCELERATED /* | SDL_RENDERER_PRESENTVSYNC */
+    );
+
     SDL_SetWindowTitle(window, "GGit");
     SDL_GetWindowSize(window, &ui.screen_w, &ui.screen_h);
     TTF_Font* font = TTF_OpenFont("res/segoeui.ttf", 13);
@@ -1282,15 +1422,21 @@ main(int argc, char** argv)
         );
     }
 
+    // ggit_graph_load(&graph, "D:/public/ggit/tests/draft");
     // ggit_graph_load(&graph, "D:/public/ggit/tests/1");
     // ggit_graph_load(&graph, "D:/public/ggit/tests/2");
-    ggit_graph_load(&graph, "D:/public/ggit/tests/3");
+    // ggit_graph_load(&graph, "D:/public/ggit/tests/3");
     // ggit_graph_load(&graph, "D:/public/ggit/tests/tag-with-multiple-matches");
     // ggit_graph_load(&graph, "C:/Projects/ColumboMonorepo");
-    // ggit_graph_load(&graph, "D:/Stuff/work/Columbo");
+    ggit_graph_load(&graph, "D:/Stuff/work/Columbo");
+
+    uint64_t start_frame = 0;
+    uint64_t end_frame = Now();
+    int frame_counter = 0;
 
     bool running = true;
     while (running) {
+        start_frame = Now();
         input.delta_mouse_x = 0;
         input.delta_mouse_y = 0;
         for (int i = 0; i < ARRAY_COUNT(input.buttons); ++i) {
@@ -1365,6 +1511,17 @@ main(int argc, char** argv)
         ggit_ui_draw_overlay(&ui, &input, &graph);
         ggit_ui_draw_graph(&ui, &input, &graph);
         SDL_RenderPresent(renderer);
+
+        end_frame = Now();
+        uint64_t diff_frame = end_frame - start_frame;
+        if (frame_counter++ == 120) {
+            frame_counter = 0;
+            printf(
+                "Frame took = %lld, fps=%fs\n",
+                diff_frame,
+                (double)PERF_FREQ / diff_frame
+            );
+        }
     }
 end:;
     TTF_CloseFont(font);

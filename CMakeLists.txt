@@ -29,7 +29,7 @@ if(WIN32)
         ggit-git-win32.c
     )
 endif()
-target_link_libraries(ggit SDL2 SDL2main SDL2_ttf)
+target_link_libraries(ggit SDL2 SDL2main SDL2_ttf kernel32 user32 advapi32 imm32 version winmm cfgmgr32 Setupapi)
 
 file(
     COPY

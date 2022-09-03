@@ -52,7 +52,7 @@ struct ggit_ui
     struct cache
     {
         int compressed_width;
-        struct ggit_vector compressed_x; /* int */
+        struct ggit_vector commit_x; /* int */
     } cache;
 
     /*

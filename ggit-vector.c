@@ -21,7 +21,7 @@ ggit_realloc(void** data_block, int element_size, int old_elements, int new_elem
             free(old_block);
         }
     }
-    printf("ReAlloc: %p %d->%d\n", *data_block, old_elements, new_elements);
+    // printf("ReAlloc: %p %d->%d %p\n", *data_block, old_elements, new_elements, new_block);
 
     *data_block = new_block;
     return true;
